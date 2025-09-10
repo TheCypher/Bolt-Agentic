@@ -1,4 +1,4 @@
-# Bolt
+# Bolt Agentic
 
 > **Headless, TypeScript‑first primitives for building reliable, provider‑agnostic AI agents and workflows.**
 >
@@ -8,13 +8,13 @@
 
 ## Who we are
 
-We’re a small group of practitioners who kept rebuilding the same AI plumbing—routing, planning, tool calls, memory, retries, and observability—every time we shipped a new feature. **Bolt** exists to make those foundations **simple, composable, and production‑ready** for everyone, from seasoned engineers to developers just getting started.
+We’re a small group of practitioners who kept rebuilding the same AI plumbing: routing, planning, tool calls, memory, retries, and observability every time we shipped a new feature. **Bolt** exists to make those foundations **simple, composable, and production‑ready** for everyone, from seasoned engineers to developers just getting started.
 
 **What we value**
 
 * **Headless & composable:** Tiny primitives, no UI, works with any stack.
 * **Reliability by default:** Retries, timeouts, fallbacks, circuit breaker, and transparent traces.
-* **Provider‑agnostic:** OpenAI, Anthropic, Google, Groq, Mistral, Azure—choose what’s best per task.
+* **Provider‑agnostic:** OpenAI, Anthropic, Google, Groq, Mistral, Azure choose what’s best per task.
 * **Structured outputs:** First‑class JSON/SQL generation with schema validation and score checks.
 * **Great DX:** Minimal boilerplate, TypeScript types, sensible defaults.
 
@@ -22,7 +22,7 @@ We’re a small group of practitioners who kept rebuilding the same AI plumbing�
 
 ## What we’re trying to accomplish
 
-**Mission:** Reduce “time to trustworthy AI features” from weeks to minutes by standardizing the **core agentic building blocks**—so you can focus on your product, not the scaffolding.
+**Mission:** Reduce “time to trustworthy AI features” from weeks to minutes by standardizing the **core agentic building blocks** - so you can focus on your product, not the scaffolding.
 
 **North‑star DX metrics**
 
