@@ -1,0 +1,5 @@
+packages:
+  - 'packages/*'       # core, agents, tools, next, react
+  - 'packages/*/*'     # providers/openai, memory/redis, etc.
+  - '!packages/**/src/**'  # never treat src folders as workspaces
+  - 'examples/*'

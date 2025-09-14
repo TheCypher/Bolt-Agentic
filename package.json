@@ -1,0 +1,16 @@
+{
+  "name": "bolt",
+  "private": true,
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }  
+}

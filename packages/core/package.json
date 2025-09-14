@@ -1,0 +1,17 @@
+{
+  "name": "@bolt-ai/core",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
+  "clean": "rimraf dist"
+  },
+  "devDependencies": {
+  "tsup": "^8.0.0",
+  "zod": "^3.23.8"
+  },
+  "dependencies": {}
+}

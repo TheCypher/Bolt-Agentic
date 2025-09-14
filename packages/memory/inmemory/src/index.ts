@@ -1,0 +1,1 @@
+export { InMemoryStore } from '@bolt-ai/core';
