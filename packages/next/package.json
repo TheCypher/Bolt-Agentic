@@ -10,10 +10,12 @@
   },
   "peerDependencies": {
     "next": ">=13.4.0",
-    "@bolt-ai/core": ">=0.0.0"
+    "@bolt-ai/core": ">=0.0.0",
+    "@bolt-ai/memory-redis": "*"
   },
   "peerDependenciesMeta": {
-    "@bolt-ai/core": { "optional": false }
+    "@bolt-ai/core": { "optional": false },
+    "@bolt-ai/memory-redis": { "optional": true }
   },
   "dependencies": {
     "fast-glob": "^3.3.2"

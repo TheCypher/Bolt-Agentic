@@ -1,4 +1,3 @@
-// packages/next/src/router.ts
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import fg from "fast-glob";
@@ -16,28 +15,14 @@ import type {
 } from "@bolt-ai/core";
 
 export type NextCreateOptions = {
-  /** Policy preset for the core router */
   preset?: "fast" | "cheap" | "strict";
-  /** Provide providers explicitly (skips auto-detect) */
   providers?: ModelProvider[];
-  /** Optional in-app agents directory (relative to process.cwd(), e.g. 'agents') */
   agentsDir?: string;
-  /** Explicit agents map (alternative to agentsDir) */
   agents?: Record<string, Agent>;
-  /** Provide a MemoryStore implementation (defaults to InMemoryStore) */
   memory?: MemoryStore;
-  /** Enable/disable provider auto-detection by env (default: true) */
   providerAutoDetect?: boolean;
 };
 
-/**
- * Create a Bolt AppRouter prepped for Next.js.
- * - Registers explicit `agents` if provided.
- * - Picks up agents published on `globalThis.__BOLT_AGENTS__` by the app.
- * - Best-effort auto-load from compiled Next output `.next/server/app/<agentsDir>/**.js`,
- *   falling back to `<agentsDir>/**.js` if present.
- * - Auto-detects Groq provider if GROQ_API_KEY is set and @bolt-ai/providers-groq is installed.
- */
 export async function createAppRouter(
   opts: NextCreateOptions = {}
 ): Promise<AppRouter> {
@@ -48,43 +33,36 @@ export async function createAppRouter(
   if (opts.providers?.length) {
     providers.push(...opts.providers);
   } else if (opts.providerAutoDetect !== false) {
-    // Auto-detect Groq when env key present AND package installed.
     if (process.env.GROQ_API_KEY) {
       try {
-        // Use a computed specifier so DTS doesn't require the module at build time.
         const spec = "@bolt-ai/providers-groq";
         const mod: any = await import(spec).catch(() => null);
         if (mod?.createGroqProvider) {
           providers.push(mod.createGroqProvider());
         }
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
-    // (Future: add other provider autodetects here)
   }
 
+  // Resolve memory (default InMemory; optionally switch to Redis)
   let memory = opts.memory ?? new InMemoryStore();
 
-  // Auto-detect Redis memory
   if (!opts.memory && process.env.REDIS_URL) {
     try {
-      const spec = "@bolt-ai/memory-redis"; // computed to avoid DTS resolution
+      const spec = "@bolt-ai/memory-redis";
       const mod: any = await import(spec).catch(() => null);
       if (mod?.createRedisMemoryStore) {
-        memory = mod.createRedisMemoryStore({}); // uses REDIS_URL env
+        memory = mod.createRedisMemoryStore({}); // uses REDIS_URL
       }
-    } catch {
-      // ignore if package isn't installed
-    }
+    } catch { /* ignore if not installed */ }
   }
 
-  // Core router
+  // Core router — IMPORTANT: pass the resolved `memory`
   const router = createCoreRouter({
     preset: opts.preset ?? "fast",
     providers,
     events,
-    memory: opts.memory ?? new InMemoryStore(),
+    memory, // <-- use this, not a fresh InMemory
   });
 
   // Agents: explicit map wins
@@ -93,7 +71,7 @@ export async function createAppRouter(
     return router;
   }
 
-  // Pick up agents published by the app on globalThis (guaranteed to be bundled by Next)
+  // Global publish
   const g = globalThis as any;
   const published = g.__BOLT_AGENTS__ || g.__BOLT_AGENTS || {};
   if (published && Object.keys(published).length) {
@@ -101,7 +79,7 @@ export async function createAppRouter(
     return router;
   }
 
-  // Best-effort discovery from compiled Next output (and fallback to plain JS)
+  // Discover compiled or plain JS agents
   if (opts.agentsDir) {
     const discovered = await discoverAgents(opts.agentsDir);
     if (Object.keys(discovered).length) {
@@ -112,35 +90,26 @@ export async function createAppRouter(
   return router;
 }
 
-async function discoverAgents(
-  agentsDir: string
-): Promise<Record<string, Agent>> {
+async function discoverAgents(agentsDir: string): Promise<Record<string, Agent>> {
   const root = process.cwd();
   let files: string[] = [];
 
-  // 1) Prefer compiled JS under .next/server/app/<agentsDir>/**
   try {
     const compiledDir = path.join(root, ".next", "server", "app", agentsDir);
     files = await fg(["**/*.{js,mjs,cjs}"], { cwd: compiledDir, absolute: true });
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 
-  // 2) Fallback: plain JS under <agentsDir> (don’t try TS at runtime)
   if (!files.length) {
     try {
       const srcDir = path.join(root, agentsDir);
       files = await fg(["**/*.{js,mjs,cjs}"], { cwd: srcDir, absolute: true });
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }
 
   const agents: Record<string, Agent> = {};
   for (const file of files) {
     try {
       const mod = await import(pathToFileURL(file).href);
-      // Try common export shapes and any named exports
       const candidates: any[] = [
         mod?.default,
         mod?.agent,
@@ -152,10 +121,7 @@ async function discoverAgents(
           agents[(c as Agent).id] = c as Agent;
         }
       }
-    } catch {
-      /* skip files that fail to import */
-    }
+    } catch { /* skip bad files */ }
   }
   return agents;
 }
-

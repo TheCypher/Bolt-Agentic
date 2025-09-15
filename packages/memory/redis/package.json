@@ -3,23 +3,29 @@
   "version": "0.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "peerDependencies": {
     "@bolt-ai/core": ">=0.0.0"
+  },
+  "dependencies": {
+    "redis": "^4.6.13"
   },
   "devDependencies": {
     "@bolt-ai/core": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
-    "rimraf": "^6.0.1",
-    "redis": "^4.6.13"
+    "rimraf": "^6.0.1"
   },
   "scripts": {
-    "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
+    "build": "tsup src/index.ts --dts --format esm --tsconfig tsconfig.json", 
     "clean": "rimraf dist"
   }
 }
