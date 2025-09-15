@@ -64,6 +64,8 @@ export async function createAppRouter(
     // (Future: add other provider autodetects here)
   }
 
+  let memory = opts.memory ?? new InMemoryStore();
+
   // Core router
   const router = createCoreRouter({
     preset: opts.preset ?? "fast",
@@ -91,6 +93,20 @@ export async function createAppRouter(
     const discovered = await discoverAgents(opts.agentsDir);
     if (Object.keys(discovered).length) {
       (router as any).registerAgents?.(discovered);
+    }
+  }
+
+
+  // Auto-detect Redis memory
+  if (!opts.memory && process.env.REDIS_URL) {
+    try {
+      const spec = "@bolt-ai/memory-redis"; // computed to avoid DTS resolution
+      const mod: any = await import(spec).catch(() => null);
+      if (mod?.createRedisMemoryStore) {
+        memory = mod.createRedisMemoryStore({}); // uses REDIS_URL env
+      }
+    } catch {
+      // ignore if package isn't installed
     }
   }
 
@@ -143,3 +159,4 @@ async function discoverAgents(
   }
   return agents;
 }
+

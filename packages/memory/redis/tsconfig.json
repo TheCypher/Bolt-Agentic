@@ -4,10 +4,9 @@
     "outDir": "dist",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "declaration": true,
-    "emitDeclarationOnly": false,
     "target": "ES2022",
-    "lib": ["ES2022"]
+    "lib": ["ES2022"],
+    "declaration": true
   },
   "include": ["src/**/*.ts"]
 }

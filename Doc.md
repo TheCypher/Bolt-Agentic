@@ -193,6 +193,84 @@ your-next-app/
    └─ index.ts
 ```
 
+# Memory
+
+Bolt stores lightweight conversation and KV state behind a `MemoryStore` interface.
+
+## Options
+
+- **InMemoryStore** (default)
+  - Zero config, per-process, ephemeral.
+  - Great for local dev, demos, tests.
+  - Not shared across workers; data resets on restart.
+
+- **RedisMemoryStore** (production-ready)
+  - Persistent and shared across instances.
+  - Requires `@bolt-ai/memory-redis` and `REDIS_URL`.
+
+## Using InMemory (default)
+
+If you don’t pass `memory` and `REDIS_URL` isn’t set, Bolt uses `InMemoryStore`.
+
+```ts
+import { createAppRouter } from '@bolt-ai/core';
+const router = createAppRouter({ preset: 'fast' }); // uses InMemory by default
+````
+
+Force it explicitly:
+
+```ts
+import { InMemoryStore, createAppRouter } from '@bolt-ai/core';
+const router = createAppRouter({ preset: 'fast', memory: new InMemoryStore() });
+```
+
+## Using Redis
+
+```ts
+import { createRedisMemoryStore } from '@bolt-ai/memory-redis';
+const router = createAppRouter({
+  preset: 'fast',
+  memory: createRedisMemoryStore() // reads REDIS_URL
+});
+```
+
+Or let the Next adapter auto-pick Redis when `REDIS_URL` is set.
+
+### Environment
+
+```
+REDIS_URL=redis://localhost:6379
+```
+
+### Notes
+
+* `history(scope, limit)` returns the last N messages for that agent/scope.
+* Router appends **user** and **assistant** turns automatically.
+* For production, prefer Redis (or another external store) to share state across instances.
+
+````
+
+## Quick sanity check (to see InMemory working)
+
+1) **Remove** `REDIS_URL` (or force `InMemoryStore()` as above).
+2) Hit your chat a few times.
+3) Add a quick probe route:
+   ```ts
+   // app/api/ai/_memcheck/route.ts
+   import { createAppRouter } from '@bolt-ai/next';
+   export const runtime = 'nodejs';
+   export async function GET() {
+     const r: any = await createAppRouter({ preset: 'fast', agentsDir: 'agents' });
+     const mem = r?.opts?.memory ?? r?.memory;
+     const hist = await mem.history?.('support', 50);
+     return new Response(JSON.stringify({ count: hist?.length ?? 0, last: hist?.at?.(-1) ?? null }), {
+       headers: { 'content-type': 'application/json' }
+     });
+   }
+````
+
+4. Open `/api/ai/_memcheck` → you should see `count > 0` while the server stays up. Restarting the server clears InMemory (by design).
+
 ---
 
 ## What’s implemented (v0.1-pre)
@@ -202,6 +280,7 @@ your-next-app/
   * `createAppRouter()` with `route()` and `routeStream(onToken)`
   * Unified provider call args (`stream`, `onToken`)
   * InMemory memory store; lightweight event bus; typed errors
+  * RedisMemoryStore; Persistent and shared across instances.(production-ready)
 
 * **@bolt-ai/agents**
 
