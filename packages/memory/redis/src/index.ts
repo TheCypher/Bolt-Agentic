@@ -1,3 +1,4 @@
+// packages/memory/redis/index.ts
 import { createClient, type RedisClientType } from "redis";
 import type { MemoryStore, Message } from "@bolt-ai/core";
 

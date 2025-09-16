@@ -2,30 +2,31 @@
   "name": "@bolt-ai/memory-redis",
   "version": "0.0.0",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
-  "peerDependencies": {
-    "@bolt-ai/core": ">=0.0.0"
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
+    "clean": "rimraf dist"
   },
-  "dependencies": {
-    "redis": "^4.6.13"
+  "peerDependencies": {
+    "@bolt-ai/core": "0.0.0"
   },
   "devDependencies": {
     "@bolt-ai/core": "workspace:*",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.2",
-    "rimraf": "^6.0.1"
+    "typescript": "^5.9.0",
+    "rimraf": "^5.0.5"
   },
-  "scripts": {
-    "build": "tsup src/index.ts --dts --format esm --tsconfig tsconfig.json", 
-    "clean": "rimraf dist"
+  "dependencies": {
+    "redis": "^4.6.13"
   }
 }
