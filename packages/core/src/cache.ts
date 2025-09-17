@@ -7,10 +7,12 @@ export class InMemoryStepCache implements StepCache {
     const e = this.map.get(key);
     if (!e) return null;
     if (e.exp && Date.now() > e.exp) { this.map.delete(key); return null; }
-    return structuredClone(e.v);
+    // structuredClone not always available in older node; fallback:
+    return typeof structuredClone === 'function' ? structuredClone(e.v) : JSON.parse(JSON.stringify(e.v));
   }
   async set(key: string, value: any, ttlSeconds = 300) {
     const exp = ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null;
-    this.map.set(key, { v: structuredClone(value), exp });
+    const v = typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+    this.map.set(key, { v, exp });
   }
 }

@@ -1,7 +1,5 @@
 // packages/core/src/types.ts
 
-// ---------- Provider & Messaging ----------
-
 export type Capability = 'text' | 'json' | 'vision' | 'image' | 'embedding';
 
 export interface Message {
@@ -25,7 +23,7 @@ export interface ProviderCallArgs {
 
 export interface ProviderResult<T = any> {
   output: T;
-  tokens?: number;
+  tokens?: number;     // optional token count for budgeting
   trace?: any;
 }
 
@@ -35,12 +33,10 @@ export interface ModelProvider {
   call(args: ProviderCallArgs): Promise<ProviderResult>;
 }
 
-// ---------- Tools & Memory ----------
-
 export interface ToolContext {
   allow?: string[];
   memory?: MemoryStore;
-  signal?: AbortSignal;
+  signal?: AbortSignal;           // <-- propagate cancellation/timeouts to tools
 }
 
 export interface Tool<TArgs = any, TOut = any> {
@@ -55,6 +51,77 @@ export interface ToolRegistry {
   register(t: Tool): void;
 }
 
+export interface Guard {
+  schema?: any;
+  scoreCheck?: { min: number; scorer: 'consistency' | 'toxicity' | 'grounding' };
+  /** backoffMs optional so { retry: { max: 1 } } type-checks */
+  retry?: { max: number; backoffMs?: number };
+}
+
+type BaseStep = {
+  id: string;
+  guard?: Guard;
+  /** optional cache signature key; "auto" derives from (step,input) */
+  cacheKey?: string | 'auto';
+  /** per-step timeout in ms (soft; see notes) */
+  timeoutMs?: number;
+  /** optional idempotency key hint for tools */
+  idempotencyKey?: string;
+};
+
+export type ModelStep = BaseStep & {
+  kind: 'model';
+  agent: string;
+  inputFrom?: string[];
+};
+
+export type ToolStep = BaseStep & {
+  kind: 'tool';
+  toolId: string;
+  args?: any;
+  inputFrom?: string[];
+};
+
+export type ParallelStep = BaseStep & {
+  kind: 'parallel';
+  children: string[];   // child step ids (model/tool), executed concurrently
+  maxConcurrency?: number;
+};
+
+export type Expr =
+  | { var: string }       // reference into outputs, e.g. { var: "validate.valid" }
+  | { value: any }        // literal
+  | string | number | boolean | null;
+
+export type Condition =
+  | { truthy: string }    // treat outputs["a.b.c"] as boolean
+  | { eq: { left: Expr; right: Expr } }
+  | { gt: { left: Expr; right: Expr } }
+  | { lt: { left: Expr; right: Expr } }
+  | string;               // shorthand truthy for "some.step.path"
+
+export type BranchStep = BaseStep & {
+  kind: 'branch';
+  branches: { when: Condition; then: string[] }[];
+  else?: string[];
+};
+
+export type MapChild =
+  | ({ kind: 'model'; agent: string; inputFrom?: string[] } & Omit<BaseStep, 'id'>)
+  | ({ kind: 'tool'; toolId: string; args?: any; inputFrom?: string[] } & Omit<BaseStep, 'id'>);
+
+export type MapStep = BaseStep & {
+  kind: 'map';
+  itemsFrom: string;        // step id whose output is an array
+  child: MapChild;          // template step to run for each item
+  maxConcurrency?: number;  // per-map concurrency
+  fromItemAsInput?: boolean;// if true, pass the array item as the child's input
+};
+
+export type PlanStep = ModelStep | ToolStep | ParallelStep | BranchStep | MapStep;
+
+export interface Plan { id: string; steps: PlanStep[]; outputs: string[] }
+
 export interface MemoryStore {
   get<T = unknown>(key: string): Promise<T | null>;
   set<T = unknown>(key: string, value: T, ttlSeconds?: number): Promise<void>;
@@ -62,8 +129,6 @@ export interface MemoryStore {
   appendConversation(id: string, m: Message): Promise<void>;
   history(id: string, limit?: number): Promise<Message[]>;
 }
-
-// ---------- Agents ----------
 
 export interface AgentCtx {
   input: unknown;
@@ -80,8 +145,7 @@ export interface Agent {
   run(ctx: AgentCtx): Promise<any>;
 }
 
-// ---------- Runner / Planner support ----------
-
+/** Runner/Planner support types */
 export type ToolFn = (args: any, ctx: RunnerContext) => Promise<any>;
 
 export interface RunnerContext {
@@ -89,8 +153,8 @@ export interface RunnerContext {
   agentId: string;
   input: any;
   memoryScope?: string;
-  /** Optional ad-hoc tools map for the runner (toolId → function). */
   tools?: Record<string, ToolFn>;
+  signal?: AbortSignal | null;
 }
 
 export interface RunnerEvent {
@@ -103,97 +167,28 @@ export interface RunnerEvent {
 }
 
 export interface StepCache {
-  get: (key: string) => Promise<any | null>;
-  set: (key: string, value: any, ttlSeconds?: number) => Promise<void>;
+  get(key: string): Promise<any | null>;
+  set(key: string, value: any, ttlSeconds?: number): Promise<void>;
 }
+
+/** Optional budget limits for a run */
+export interface Budget {
+  maxLatencyMs?: number;
+  maxCostUSD?: number;
+}
+
+/** Cost estimator: given a step and its result, return $ cost */
+export type CostEstimator = (args: {
+  step: PlanStep;
+  result: any;
+  tokens?: number;
+}) => number;
 
 export interface RunOptions {
-  /** Max parallelism for 'parallel' groups (default 3) */
   maxConcurrency?: number;
-  /** Event handler for UI/progress */
   onEvent?: (e: RunnerEvent) => void;
-  /** Optional cache for step outputs */
   cache?: StepCache | null;
-  /** Default TTL for cached steps (seconds). Default 300. */
   defaultStepTTLSeconds?: number;
-}
-
-// ---------- Planning DSL ----------
-
-export interface Guard {
-  schema?: any;
-  scoreCheck?: { min: number; scorer: 'consistency' | 'toxicity' | 'grounding' };
-  /** backoffMs optional so literals like { retry: { max: 1 } } type-check */
-  retry?: { max: number; backoffMs?: number };
-}
-
-type BaseStep = {
-  id: string;
-  guard?: Guard;
-  /** optional cache signature key; "auto" lets the runner derive a key from step+input */
-  cacheKey?: string | 'auto';
-  /** per-step timeout in ms */
-  timeoutMs?: number;
-  /** optional idempotency key passed to tools (if runner/tool respects it) */
-  idempotencyKey?: string;
-};
-
-export type ModelStep = BaseStep & {
-  kind: 'model';
-  agent: string;
-  inputFrom?: string[]; // upstream step ids
-};
-
-export type ToolStep = BaseStep & {
-  kind: 'tool';
-  toolId: string;
-  args?: any;
-  inputFrom?: string[];
-};
-
-export type ParallelStep = BaseStep & {
-  kind: 'parallel';
-  children: string[];   // child step ids (model/tool), executed concurrently
-  maxConcurrency?: number;
-};
-
-// Expressions & conditions for branches
-export type Expr =
-  | { var: string }       // reference into outputs, e.g. { var: "validate.valid" }
-  | { value: any }        // literal
-  | string | number | boolean | null;
-
-export type Condition =
-  | { truthy: string }    // shorthand: evaluate outputs["..."] truthiness
-  | { eq: { left: Expr; right: Expr } }
-  | { gt: { left: Expr; right: Expr } }
-  | { lt: { left: Expr; right: Expr } }
-  // backwards-compat: allow a bare string like "someStep" to mean truthy ref
-  | string;
-
-export type BranchStep = BaseStep & {
-  kind: 'branch';
-  branches: { when: Condition; then: string[] }[];
-  else?: string[];
-};
-
-// Map over an array produced by a previous step
-export type MapChild =
-  | ({ kind: 'model'; agent: string; inputFrom?: string[] } & Omit<BaseStep, 'id'>)
-  | ({ kind: 'tool'; toolId: string; args?: any; inputFrom?: string[] } & Omit<BaseStep, 'id'>);
-
-export type MapStep = BaseStep & {
-  kind: 'map';
-  itemsFrom: string;        // step id whose output is an array
-  child: MapChild;          // template step to run for each item
-  maxConcurrency?: number;  // per-map concurrency
-  fromItemAsInput?: boolean;// if true, pass the array item as the child's input
-};
-
-export type PlanStep = ModelStep | ToolStep | ParallelStep | BranchStep | MapStep;
-
-export interface Plan {
-  id: string;
-  steps: PlanStep[];
-  outputs: string[];
+  stepTimeoutMs?: number;
+  budget?: Budget;
 }
