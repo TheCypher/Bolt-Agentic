@@ -87,7 +87,6 @@ export async function createAppRouter(
 
   // ----- Core router (pass resolved memory!) -----
   const router = createCoreRouter({
-    preset: opts.preset ?? "fast",
     providers,
     events,
     memory,
