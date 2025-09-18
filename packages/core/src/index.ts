@@ -8,3 +8,4 @@ export * from './tools';
 export * from './templates';
 export * from './cache';
 export * from './planners/llm';
+export * from './tools/registry';

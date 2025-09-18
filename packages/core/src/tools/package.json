@@ -1,0 +1,29 @@
+{
+  "name": "@bolt-ai/tools",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "@bolt-ai/core": "0.0.0"
+  },
+  "devDependencies": {
+    "@bolt-ai/core": "workspace:*",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.0",
+    "rimraf": "^5.0.5"
+  }
+}
