@@ -1,17 +1,53 @@
 {
   "name": "@bolt-ai/core",
   "version": "0.0.13",
+  "description": "Headless TypeScript primitives for provider-agnostic AI agents and workflows.",
+  "license": "MIT",
+  "author": "Bolt AI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheCypher/Bolt-Agentic.git"
+  },
+  "homepage": "https://github.com/TheCypher/Bolt-Agentic#readme",
+  "bugs": {
+    "url": "https://github.com/TheCypher/Bolt-Agentic/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "workflows",
+    "typescript",
+    "bolt"
+  ],
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
-  "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "prepublishOnly": "pnpm run build"
   },
+  "dependencies": {},
   "devDependencies": {
-  "tsup": "^8.0.0",
-  "zod": "^3.23.8"
-  },
-  "dependencies": {}
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.5.0"
+  }
 }
