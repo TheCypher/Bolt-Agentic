@@ -1,15 +1,40 @@
 {
   "name": "@bolt-ai/providers-groq",
-  "version": "0.0.13",
+  "version": "0.0.14",
+  "description": "Groq model provider adapter for Bolt AI agents.",
+  "license": "MIT",
+  "author": "Bolt AI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheCypher/Bolt-Agentic.git"
+  },
+  "homepage": "https://github.com/TheCypher/Bolt-Agentic#readme",
+  "bugs": {
+    "url": "https://github.com/TheCypher/Bolt-Agentic/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "groq",
+    "providers",
+    "bolt"
+  ],
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
   },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
-    "@bolt-ai/core": ">=0.0.0"
+    "@bolt-ai/core": ">=0.0.14"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": { "optional": false }

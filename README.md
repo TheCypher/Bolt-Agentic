@@ -50,10 +50,19 @@ We’re a small group of practitioners who kept rebuilding the same AI plumbing:
 
 > **Note:** Package names are tentative and may change before 1.0. Use the monorepo locally until published.
 
+The ecosystem is modular—install only what you need for your stack. At minimum grab `@bolt-ai/core`, then add adapters from the list below.
+
 ```bash
-pnpm add @bolt-ai/core @bolt-ai/react @bolt-ai/next @bolt-ai/agents
-# Optional
-# pnpm add @bolt-ai/tools @bolt-ai/memory-redis
+# Core primitives (required for everything else)
+pnpm add @bolt-ai/core
+
+# Typical stacks
+pnpm add @bolt-ai/core @bolt-ai/agents              # headless Node project
+pnpm add @bolt-ai/core @bolt-ai/agents @bolt-ai/next # Next.js API + routing helpers
+pnpm add @bolt-ai/core @bolt-ai/agents @bolt-ai/react # React client hooks
+
+# Optional extensions
+pnpm add @bolt-ai/tools @bolt-ai/memory-redis @bolt-ai/providers-groq
 ```
 
 **Provider SDKs (optional but recommended for performance):** `openai`, `@anthropic-ai/sdk`, `@google/generative-ai`, `@azure/openai`, `groq-sdk`, `@mistralai/mistralai`.
@@ -75,6 +84,96 @@ BOLT_PRESET=fast # fast | cheap | strict
 
 # Memory (optional)
 REDIS_URL=redis://localhost:6379
+```
+
+---
+
+## Packages
+
+### `@bolt-ai/core`
+- **What:** Headless primitives—router, planner/runner, event bus, in-memory store, types.
+- **Install:** `pnpm add @bolt-ai/core`
+- **Use it when:** You want to build or integrate agents in any Node/TypeScript environment.
+
+```ts
+import { createAppRouter } from '@bolt-ai/core';
+
+const router = createAppRouter({ preset: 'fast' });
+const result = await router.run('agent-id', { text: 'hello' });
+```
+
+### `@bolt-ai/agents`
+- **What:** Helpers to declare agents with typed inputs/outputs and sensible defaults.
+- **Install:** `pnpm add @bolt-ai/agents`
+- **Use it when:** You want reusable agent definitions that plug into the core router.
+
+```ts
+import { defineAgent } from '@bolt-ai/agents';
+
+export const supportAgent = defineAgent({
+  id: 'support',
+  capabilities: ['text'],
+  async run({ input, call }) {
+    return call({ kind: 'text', prompt: String(input) });
+  },
+});
+```
+
+### `@bolt-ai/tools`
+- **What:** Built-in tool implementations (HTTP fetch, search, vector, etc.) plus registry helpers.
+- **Install:** `pnpm add @bolt-ai/tools`
+- **Use it when:** Your agents need vetted tool calls with JSON schemas and guard rails.
+
+```ts
+import { createHttpTool } from '@bolt-ai/tools';
+
+const httpTool = createHttpTool({ allow: ['https://api.example.com/*'] });
+```
+
+### `@bolt-ai/memory-redis`
+- **What:** Redis-backed memory store compatible with the core router.
+- **Install:** `pnpm add @bolt-ai/memory-redis`
+- **Use it when:** You need durable conversation or workflow state beyond the default in-memory store.
+
+```ts
+import { createRedisMemoryStore } from '@bolt-ai/memory-redis';
+
+const memory = createRedisMemoryStore({ url: process.env.REDIS_URL });
+```
+
+### `@bolt-ai/react`
+- **What:** Client-side hooks and helpers to bind agent sessions to React components.
+- **Install:** `pnpm add @bolt-ai/react`
+- **Use it when:** You want first-class agent chat/state management in a React app.
+
+```tsx
+import { useAgent } from '@bolt-ai/react';
+
+const { messages, send } = useAgent('support');
+```
+
+### `@bolt-ai/next`
+- **What:** Next.js integration—router factory, request handlers, SSE utilities.
+- **Install:** `pnpm add @bolt-ai/next`
+- **Use it when:** You deploy with Next.js and want zero-boilerplate API endpoints for agents.
+
+```ts
+import { createAppRouter, handle } from '@bolt-ai/next';
+
+const router = await createAppRouter({ agentsDir: 'agents' });
+export const POST = handle(router);
+```
+
+### `@bolt-ai/providers-groq`
+- **What:** Groq model provider adapter that plugs into the core router.
+- **Install:** `pnpm add @bolt-ai/providers-groq`
+- **Use it when:** You want automatic Groq support (LLAMA 3, Mixtral, etc.) via Bolt’s provider abstraction.
+
+```ts
+import { createGroqProvider } from '@bolt-ai/providers-groq';
+
+const groq = createGroqProvider();
+router.registerProvider(groq);
 ```
 
 ---

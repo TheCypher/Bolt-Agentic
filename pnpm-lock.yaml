@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
 
   packages/agents:
     devDependencies:
@@ -25,21 +29,6 @@ importers:
 
   packages/core:
     devDependencies:
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.0(postcss@8.4.31)(typescript@5.9.2)
-      zod:
-        specifier: ^3.23.8
-        version: 3.25.76
-
-  packages/memory/redis:
-    devDependencies:
-      '@bolt-ai/core':
-        specifier: workspace:*
-        version: link:../../core
-      redis:
-        specifier: ^4.6.13
-        version: 4.7.1
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -47,7 +36,26 @@ importers:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.4.31)(typescript@5.9.2)
       typescript:
-        specifier: ^5.9.2
+        specifier: ^5.5.0
+        version: 5.9.2
+
+  packages/memory/redis:
+    dependencies:
+      redis:
+        specifier: ^4.6.13
+        version: 4.7.1
+    devDependencies:
+      '@bolt-ai/core':
+        specifier: workspace:*
+        version: link:../../core
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.4.31)(typescript@5.9.2)
+      typescript:
+        specifier: ^5.9.0
         version: 5.9.2
 
   packages/next:
@@ -59,6 +67,12 @@ importers:
       '@bolt-ai/core':
         specifier: workspace:*
         version: link:../core
+      '@bolt-ai/memory-redis':
+        specifier: workspace:*
+        version: link:../memory/redis
+      '@bolt-ai/providers-groq':
+        specifier: workspace:*
+        version: link:../providers/groq
       next:
         specifier: ^14.2.0
         version: 14.2.32(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -105,6 +119,9 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
       tsup:
         specifier: ^8.0.0
         version: 8.5.0(postcss@8.4.31)(typescript@5.9.2)
@@ -1207,9 +1224,6 @@ packages:
   yallist@4.0.0:
     resolution: {integrity: sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
 snapshots:
 
   '@esbuild/aix-ppc64@0.25.9':
@@ -2136,5 +2150,3 @@ snapshots:
       strip-ansi: 7.1.2
 
   yallist@4.0.0: {}
-
-  zod@3.25.76: {}

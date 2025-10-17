@@ -1,27 +1,56 @@
 {
   "name": "@bolt-ai/next",
-  "version": "0.0.13",
+  "version": "0.0.14",
+  "description": "Next.js integration helpers for Bolt AI agents.",
+  "license": "MIT",
+  "author": "Bolt AI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheCypher/Bolt-Agentic.git"
+  },
+  "homepage": "https://github.com/TheCypher/Bolt-Agentic#readme",
+  "bugs": {
+    "url": "https://github.com/TheCypher/Bolt-Agentic/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "nextjs",
+    "typescript",
+    "bolt"
+  ],
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
   },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "next": ">=13.4.0",
-    "@bolt-ai/core": ">=0.0.0",
-    "@bolt-ai/memory-redis": "*"
+    "@bolt-ai/core": ">=0.0.14",
+    "@bolt-ai/memory-redis": ">=0.0.14",
+    "@bolt-ai/providers-groq": ">=0.0.14"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": { "optional": false },
-    "@bolt-ai/memory-redis": { "optional": true }
+    "@bolt-ai/memory-redis": { "optional": true },
+    "@bolt-ai/providers-groq": { "optional": true }
   },
   "dependencies": {
     "fast-glob": "^3.3.2"
   },
   "devDependencies": {
     "@bolt-ai/core": "workspace:*",
+    "@bolt-ai/memory-redis": "workspace:*",
+    "@bolt-ai/providers-groq": "workspace:*",
     "next": "^14.2.0",
     "tsup": "^8.5.0",
     "typescript": "^5.5.0",
