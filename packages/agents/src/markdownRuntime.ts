@@ -18,6 +18,7 @@ export interface MarkdownRuntimeOptions extends RuntimeOptions {
 }
 
 export interface MarkdownRuntime extends BoltRuntime {
+  ready(): Promise<Agent[]>;
   loadAgent(filePath: string, options?: MarkdownRuntimeLoadOptions): Promise<Agent>;
   loadAgents(dir?: string, options?: MarkdownRuntimeLoadOptions): Promise<Agent[]>;
 }
@@ -49,6 +50,7 @@ async function collectMarkdownAgentFiles(dir: string): Promise<string[]> {
 
 export function createMarkdownRuntime(options: MarkdownRuntimeOptions): MarkdownRuntime {
   const runtime = createRuntime(options) as MarkdownRuntime;
+  let readyPromise: Promise<Agent[]> | undefined;
 
   runtime.loadAgent = async (filePath: string, loadOptions: MarkdownRuntimeLoadOptions = {}) => {
     const markdown = await fs.readFile(filePath, "utf8");
@@ -69,6 +71,14 @@ export function createMarkdownRuntime(options: MarkdownRuntimeOptions): Markdown
     const files = await collectMarkdownAgentFiles(dir);
     const agents = await Promise.all(files.map((file) => runtime.loadAgent(file, loadOptions)));
     return agents.sort((a, b) => a.id.localeCompare(b.id));
+  };
+
+  runtime.ready = async () => {
+    if (!options.agentsDir) {
+      throw new Error("ready requires MarkdownRuntimeOptions.agentsDir");
+    }
+    readyPromise ??= runtime.loadAgents(options.agentsDir);
+    return readyPromise;
   };
 
   return runtime;

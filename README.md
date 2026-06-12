@@ -112,7 +112,7 @@ const runtime = createMarkdownRuntime({
   tools: [searchTool],
 });
 
-await runtime.loadAgent('agents/support.md');
+await runtime.ready();
 const result = await runtime.run('support', 'How do refunds work?');
 ```
 

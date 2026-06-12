@@ -106,4 +106,59 @@ Task: {{input}}
     expect(agents.map((agent) => agent.id)).toEqual(["research", "support"]);
     expect(runtime.listAgents().sort()).toEqual(["research", "support"]);
   });
+
+  it("ready loads agentsDir once before runtime execution", async () => {
+    const root = await makeTempDir("bolt-ready-agents-");
+    await writeFile(
+      path.join(root, "support.md"),
+      `---
+id: support
+---
+## User
+Ready: {{input}}
+`,
+    );
+
+    const model = provider("ready");
+    const runtime = createMarkdownRuntime({
+      providers: [model],
+      memory: new InMemoryStore(),
+      agentsDir: root,
+    });
+
+    await runtime.ready();
+    await runtime.ready();
+    const result = await runtime.run("support", "refunds");
+
+    expect(runtime.listAgents()).toEqual(["support"]);
+    expect(result).toMatchObject({ ok: true, output: "ready" });
+    expect(model.call).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Ready: refunds" }));
+  });
+
+  it("ready returns the same loaded agents on repeated calls", async () => {
+    const root = await makeTempDir("bolt-ready-idempotent-");
+    await writeFile(path.join(root, "support.md"), "---\nid: support\n---\nSupport");
+
+    const runtime = createMarkdownRuntime({
+      providers: [provider()],
+      memory: new InMemoryStore(),
+      agentsDir: root,
+    });
+
+    const first = await runtime.ready();
+    const second = await runtime.ready();
+
+    expect(first.map((agent) => agent.id)).toEqual(["support"]);
+    expect(second).toBe(first);
+    expect(runtime.listAgents()).toEqual(["support"]);
+  });
+
+  it("ready requires agentsDir", async () => {
+    const runtime = createMarkdownRuntime({
+      providers: [provider()],
+      memory: new InMemoryStore(),
+    });
+
+    await expect(runtime.ready()).rejects.toThrow("ready requires MarkdownRuntimeOptions.agentsDir");
+  });
 });
