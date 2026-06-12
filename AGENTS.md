@@ -24,6 +24,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Runtime diagnostics via `runtime.explain()` with provider, memory, tool, and Markdown loader state.
 - Where: `packages/core/src/runtime.ts`, `packages/agents/src/markdownRuntime.ts`, `packages/core/src/__tests__/runtime.test.ts`, `packages/agents/src/__tests__/markdownRuntime.test.ts`.
 - Why: Helps users debug loaded agents, provider choice, registered tools, and Markdown runtime readiness without making model calls.
+- What: Runtime token streaming via `run(..., { onToken })` and `RunResult.streamedText`.
+- Where: `packages/core/src/runtime.ts`, `packages/core/src/router.ts`, `packages/core/src/__tests__/runtime.test.ts`.
+- Why: Lets runtime callers and SSE adapters receive provider token deltas without bypassing the structured run result path.
 - What: Runnable Markdown runtime example with agents, skills, local tool, and deterministic mock provider.
 - Where: `examples/markdown-runtime/README.md`, `examples/markdown-runtime/run.mjs`, `examples/markdown-runtime/agents/support.md`, `examples/markdown-runtime/skills/concise.md`, `examples/markdown-runtime/tools/localKnowledge.mjs`, `examples/markdown-runtime/run.test.mjs`.
 - Why: Demonstrates the runtime-first Markdown agent workflow without network calls or API keys.

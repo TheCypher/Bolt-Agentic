@@ -224,6 +224,35 @@ describe("BoltRuntime", () => {
     );
   });
 
+  it("forwards provider tokens through runtime run options", async () => {
+    const deltas: string[] = [];
+    const model = {
+      id: "streaming",
+      supports: ["text"],
+      call: vi.fn(async (args) => {
+        args.onToken?.("hel");
+        args.onToken?.("lo");
+        return { output: "hello" };
+      }),
+    } as unknown as ModelProvider;
+    const runtime = createRuntime({
+      providers: [model],
+      memory: new InMemoryStore(),
+      agents: [echoAgent("streamer")],
+    });
+
+    const result = await runtime.run("streamer", "hi", {
+      onToken: (delta) => deltas.push(delta),
+    });
+
+    expect(deltas).toEqual(["hel", "lo"]);
+    expect(result).toMatchObject({
+      ok: true,
+      output: "hello",
+      streamedText: "hello",
+    });
+  });
+
   it("rejects provider-native tool calls outside the agent allowlist", async () => {
     const blockedRun = vi.fn(async () => "blocked");
     const model = {

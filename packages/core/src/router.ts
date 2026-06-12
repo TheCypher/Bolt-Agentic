@@ -200,7 +200,13 @@ function resolveProviderOrder(options: {
 /** Public surface other packages/apps rely on */
 export interface AppRouter {
   /** Invoke an agent by id with an input payload. Emits trace events on `events`. */
-  route(req: { id: string; agentId: string; input: unknown; memoryScope?: string }): Promise<any>;
+  route(req: {
+    id: string;
+    agentId: string;
+    input: unknown;
+    memoryScope?: string;
+    onToken?: (delta: string) => void;
+  }): Promise<any>;
 
   /** Introspect how a route would execute (no model calls). */
   explain(args: { agentId: string; input?: unknown; memoryScope?: string }): Promise<{
@@ -472,8 +478,14 @@ export class Router implements AppRouter {
   }
 
   /** ---- Routing ---- */
-  async route(req: { id: string; agentId: string; input: unknown; memoryScope?: string }): Promise<any> {
-    const { id, agentId, input, memoryScope } = req;
+  async route(req: {
+    id: string;
+    agentId: string;
+    input: unknown;
+    memoryScope?: string;
+    onToken?: (delta: string) => void;
+  }): Promise<any> {
+    const { id, agentId, input, memoryScope, onToken } = req;
     const { hints, input: cleanedInput } = extractRouteHints(input);
     const budget = mergeBudget(this.budget, hints.budget);
     const redaction = hints.redaction ? { ...this.redaction, ...hints.redaction } : this.redaction;
@@ -506,7 +518,10 @@ export class Router implements AppRouter {
         // wire token streaming into event bus (if provider supports it)
         res = await provider.call({
           ...safeArgs,
-          onToken: (delta: string) => this.events.emit({ type: 'provider:call:token', id, delta }),
+          onToken: (delta: string) => {
+            this.events.emit({ type: 'provider:call:token', id, delta });
+            onToken?.(delta);
+          },
         } as any);
       } catch (err) {
         this.recordProviderFailure(provider.id);

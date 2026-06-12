@@ -7,6 +7,7 @@ import type { Agent, MemoryStore, ModelProvider, Tool, ToolRegistry } from "./ty
 export interface RuntimeRunOptions {
   id?: string;
   memoryScope?: string;
+  onToken?: (delta: string) => void;
   throwOnError?: boolean;
 }
 
@@ -44,6 +45,7 @@ export interface RunResult<T = unknown> {
   id: string;
   agentId: string;
   output?: T;
+  streamedText?: string;
   error?: RuntimeError;
 }
 
@@ -162,8 +164,15 @@ export class DefaultBoltRuntime implements BoltRuntime {
         agentId: request.agentId,
         input: request.input,
         memoryScope: request.memoryScope,
+        onToken: request.onToken,
       });
-      return { ok: true, id, agentId: request.agentId, output };
+      return {
+        ok: true,
+        id,
+        agentId: request.agentId,
+        output,
+        streamedText: typeof output === "string" ? output : undefined,
+      };
     } catch (error) {
       if (request.throwOnError !== false) throw error;
       return { ok: false, id, agentId: request.agentId, error: normalizeError(error) };
