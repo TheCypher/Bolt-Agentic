@@ -182,4 +182,93 @@ describe("BoltRuntime", () => {
       tools: ["search"],
     });
   });
+
+  it("executes allowed provider-native tool calls and sends results into the next provider call", async () => {
+    const toolRun = vi.fn(async (args: { value: string }) => ({ echoed: args.value.toUpperCase() }));
+    const model = {
+      id: "native-tools",
+      supports: ["text"],
+      call: vi
+        .fn()
+        .mockResolvedValueOnce({
+          toolCalls: [{ id: "call-1", toolId: "allowed.echo", args: { value: "hi" } }],
+        })
+        .mockResolvedValueOnce({ output: "final output" }),
+    } as unknown as ModelProvider;
+    const runtime = createRuntime({
+      providers: [model],
+      memory: new InMemoryStore(),
+      agents: [{ ...echoAgent("native-agent"), tools: ["allowed.echo"] }],
+      tools: [{ id: "allowed.echo", run: toolRun }],
+    });
+
+    const result = await runtime.run("native-agent", "hi");
+
+    expect(result).toMatchObject({ ok: true, output: "final output" });
+    expect(toolRun).toHaveBeenCalledWith(
+      { value: "hi" },
+      expect.objectContaining({ memory: expect.any(Object), allow: ["allowed.echo"] })
+    );
+    expect(model.call).toHaveBeenCalledTimes(2);
+    expect(model.call).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        toolResults: [
+          {
+            id: "call-1",
+            toolId: "allowed.echo",
+            output: { echoed: "HI" },
+          },
+        ],
+      })
+    );
+  });
+
+  it("rejects provider-native tool calls outside the agent allowlist", async () => {
+    const blockedRun = vi.fn(async () => "blocked");
+    const model = {
+      id: "native-tools",
+      supports: ["text"],
+      call: vi.fn(async () => ({
+        toolCalls: [{ id: "call-1", toolId: "blocked.echo", args: { value: "hi" } }],
+      })),
+    } as unknown as ModelProvider;
+    const runtime = createRuntime({
+      providers: [model],
+      memory: new InMemoryStore(),
+      agents: [{ ...echoAgent("native-agent"), tools: ["allowed.echo"] }],
+      tools: [{ id: "blocked.echo", run: blockedRun }],
+    });
+
+    const result = await runtime.run("native-agent", "hi", { throwOnError: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toMatch(/Tool not allowed or not found: blocked\.echo/);
+    expect(blockedRun).not.toHaveBeenCalled();
+  });
+
+  it("stops provider-native tool call loops at the max iteration guard", async () => {
+    const toolRun = vi.fn(async () => ({ again: true }));
+    const model = {
+      id: "native-tools",
+      supports: ["text"],
+      call: vi.fn(async () => ({
+        toolCalls: [{ id: "call-loop", toolId: "allowed.echo", args: { value: "hi" } }],
+      })),
+    } as unknown as ModelProvider;
+    const runtime = createRuntime({
+      providers: [model],
+      memory: new InMemoryStore(),
+      agents: [{ ...echoAgent("native-agent"), tools: ["allowed.echo"] }],
+      tools: [{ id: "allowed.echo", run: toolRun }],
+      maxToolCallIterations: 1,
+    });
+
+    const result = await runtime.run("native-agent", "hi", { throwOnError: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toMatch(/tool call iteration limit/i);
+    expect(model.call).toHaveBeenCalledTimes(2);
+    expect(toolRun).toHaveBeenCalledTimes(1);
+  });
 });

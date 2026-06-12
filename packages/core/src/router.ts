@@ -10,6 +10,8 @@ import type {
   ModelProvider,
   ProviderCallArgs,
   ProviderResult,
+  ProviderToolCall,
+  ProviderToolResult,
   Plan,
   Budget,
   Tool,
@@ -269,6 +271,7 @@ export interface RouterOptions {
   budget?: Budget;
   costEstimator?: RouteCostEstimator;
   redaction?: RedactionOptions;
+  maxToolCallIterations?: number;
   classify?: (input: unknown, agent?: Agent) => Exclude<ProviderPreset, 'auto'>;
 }
 
@@ -327,6 +330,7 @@ export class Router implements AppRouter {
   private redaction?: RedactionOptions;
   private classify?: (input: unknown, agent?: Agent) => FixedPreset;
   private tools?: ToolRegistry;
+  private maxToolCallIterations: number;
   private breakerState = new Map<string, { failures: number; openUntil?: number }>();
 
   // optional local template registry (apps can also publish via global)
@@ -342,6 +346,10 @@ export class Router implements AppRouter {
     this.redaction = opts.redaction;
     this.classify = opts.classify;
     this.tools = opts.tools;
+    this.maxToolCallIterations =
+      typeof opts.maxToolCallIterations === 'number' && Number.isFinite(opts.maxToolCallIterations)
+        ? Math.max(0, Math.floor(opts.maxToolCallIterations))
+        : 4;
     this.memory = opts.memory;
     this.events = opts.events ?? new EventBus();
   }
@@ -488,8 +496,7 @@ export class Router implements AppRouter {
     const routeStartedAt = Date.now();
     let totalCost = 0;
 
-    // provider wrapper to emit call/stream/end events
-    const call = async (args: ProviderCallArgs): Promise<any> => {
+    const invokeProvider = async (args: ProviderCallArgs): Promise<ProviderResult> => {
       const t0 = Date.now();
       this.events.emit({ type: 'provider:call:start', id, providerId: provider.id, args: { kind: args.kind } });
 
@@ -536,7 +543,7 @@ export class Router implements AppRouter {
         throw new Error('Route budget exceeded: latency');
       }
 
-      return res.output;
+      return res;
     };
 
     // memory wrapper to trace history/append
@@ -560,6 +567,52 @@ export class Router implements AppRouter {
       registry: this.tools,
       memory,
     });
+
+    const runProviderToolCalls = async (
+      toolCalls: ProviderToolCall[],
+      iteration: number
+    ): Promise<ProviderToolResult[]> => {
+      const results: ProviderToolResult[] = [];
+      for (let index = 0; index < toolCalls.length; index += 1) {
+        const toolCall = toolCalls[index];
+        const tool = tools.get(toolCall.toolId);
+        if (!tool) {
+          throw new Error(`Tool not allowed or not found: ${toolCall.toolId}`);
+        }
+        const output = await tool.run(toolCall.args, {});
+        results.push({
+          id: toolCall.id ?? `${toolCall.toolId}:${iteration}:${index}`,
+          toolId: toolCall.toolId,
+          output,
+        });
+      }
+      return results;
+    };
+
+    // provider wrapper to emit call/stream/end events and satisfy provider-native tool calls
+    const call = async (args: ProviderCallArgs): Promise<any> => {
+      let nextArgs: ProviderCallArgs = args;
+      let toolIterations = 0;
+      let toolResults: ProviderToolResult[] = [...(args.toolResults ?? [])];
+
+      while (true) {
+        const res = await invokeProvider(nextArgs);
+        const toolCalls = res.toolCalls ?? [];
+        if (!toolCalls.length) return res.output;
+
+        if (toolIterations >= this.maxToolCallIterations) {
+          throw new Error(`Provider tool call iteration limit exceeded: ${this.maxToolCallIterations}`);
+        }
+
+        const newResults = await runProviderToolCalls(toolCalls, toolIterations);
+        toolResults = [...toolResults, ...newResults];
+        nextArgs = {
+          ...args,
+          toolResults,
+        };
+        toolIterations += 1;
+      }
+    };
 
     // run agent with the wrapped call + traced memory
     const ctx: AgentCtx = { input: cleanedInput, call, memory, tools } as any;
