@@ -1,18 +1,18 @@
 # Bolt Tools Guide
 
 > **Tools provide controlled access to external systems.**
-> They wrap side effects (HTTP, DB, search, files, MCP servers) behind a typed interface the runner can orchestrate with retries, branching, parallelism, and caching.
+> Register tools with the runtime, then expose only the allowed subset on each agent. The same tools can also be used by deterministic runner plans.
 
 **Tool Flow (ASCII)**
 
 ```
 +--------+      prompt       +----------------------+
 | USER   | --------------->  | MAIN AGENT           |
-+--------+                   | - tool descriptions  |
-                             | - chooses tool steps |
++--------+                   | - allowed tools only |
+                             | - provider tool call |
                              +----------+-----------+
                                         |
-                                      Task()
+                                      tool call
                                         |
                                         v
                               +-------------------+
@@ -28,13 +28,13 @@
 ```
 
 **Flow Explanation**
-Agents or planners select tools; the runner executes tool steps and returns structured results to plan outputs.
+Agents and providers can request allowed runtime tools. Planner/runner workflows can also execute tools as deterministic plan steps.
 
 ---
 
 ## What is a Tool?
 
-A **Tool** is a small, async function with an ID and optional schema that the Runner can call as a step in a `Plan`.
+A **Tool** is a small, async function with an ID and optional schema. The runtime exposes tools to agents through per-agent allow-lists; the runner can also call tools as steps in a `Plan`.
 
 ```ts
 // from @bolt-ai/core types
@@ -70,17 +70,55 @@ type ToolsMap = Record<string, ToolFn>;
 - **Kick off workflows** (queues, webhooks).
 - **Bridge to MCP servers** (local tools exposed via Model Context Protocol).
 
-Tools keep effects **outside** of prompts, making flows testable, reusable, and safe.
+Tools keep effects **outside** prompts, making flows testable, reusable, and governable.
 
 ---
 
 ## Ways to Provide Tools
 
-Two common patterns are shown below.
+Two common patterns are shown below. Runtime registration is the 1.0 default; per-request maps are useful for focused runner plans and tests.
 
-### A) Per-request map (minimal setup)
+### A) Runtime registration with agent allow-lists
 
-Provide a map to `runPlan`:
+Register tools once, then list the tool IDs an agent may use:
+
+```ts
+import { createRuntime, type Tool } from '@bolt-ai/core';
+
+const httpTool: Tool<{ url: string }, { status: number; text: string }> = {
+  id: 'http.fetch',
+  schema: {
+    type: 'object',
+    properties: { url: { type: 'string' } },
+    required: ['url'],
+  },
+  async run({ url }) {
+    const res = await fetch(url);
+    return { status: res.status, text: await res.text() };
+  },
+};
+
+const runtime = createRuntime({
+  providers: [provider],
+  tools: [httpTool],
+  agents: [
+    {
+      id: 'research',
+      capabilities: ['text'],
+      tools: ['http.fetch'],
+      async run({ input, call }) {
+        return call({ kind: 'text', prompt: String(input) });
+      },
+    },
+  ],
+});
+```
+
+If a provider requests a tool outside the active agent allow-list, Bolt rejects the call.
+
+### B) Per-request runner map
+
+Provide a map to `runPlan` when executing a deterministic plan:
 
 ```ts
 const tools = {
@@ -93,9 +131,9 @@ const tools = {
 await runPlan(router, plan, { taskId, agentId, input, tools });
 ```
 
-### B) Central registration (recommended)
+### C) App-level registry helpers
 
-Publish tools at app startup and pick them up everywhere.
+Some applications publish tools at app startup and pick them up in API routes.
 
 ```ts
 // src/tools/index.ts
@@ -559,6 +597,6 @@ Use it in a plan step:
 
 ## Wrap-Up
 
-* Tools are **first-class** citizens in Bolt: define them once, use them from **templates**, **heuristics**, or **LLM-planned** flows.
-* They can be **parallelized**, **branched**, **retriable**, and **cached** by the Runner.
-* Teams can ship tools alongside agents and templates in each Next.js app to expand capabilities safely and predictably.
+* Tools are **first-class** runtime capabilities in Bolt: define them once, register them with the runtime, and expose them through agent allow-lists.
+* They can also be **parallelized**, **branched**, **retriable**, and **cached** by the Runner when used in deterministic plans.
+* Teams can ship tools alongside Markdown agents and skills to expand capabilities safely and predictably.

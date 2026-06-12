@@ -1,44 +1,85 @@
 # @bolt-ai/core
 
-> **Headless primitives for building agentic systems in TypeScript.**
->
-> Router • Agents • Planner/Runner • Tools • Memory • Observability • Governance
+Core runtime primitives for Bolt Agentic 1.0.
 
-**Status:** v0.1.0 (beta). APIs may evolve as we harden production usage.
+This package provides the provider-agnostic execution layer: runtime facade, router, memory interface, tool registry, planner, runner, events, budgets, redaction hooks, scoped `BOLT.md` discovery, and shared TypeScript types.
 
----
+## Install
 
-**What this package provides**
+```bash
+pnpm add @bolt-ai/core
+```
 
-1. **Runtime** — `createRuntime()` with `run`, `route`, `runParallel`, and structured `RunResult`.
-2. **Router** — capability-aware routing with ordered preference and policy-aware presets (`fast | cheap | strict | auto`).
-3. **Permissioned tools** — runtime registry with per-agent declared tool allow-lists.
-4. **Planner + Runner** — deterministic plans with retries, guards, branching, and caching.
-5. **Memory interfaces** — default in-memory store + Redis adapter compatibility.
-6. **Observability** — event bus + trace events.
-7. **Governance** — scoped `BOLT.md` instructions, score/budget guards, allow-listed HTTP, redaction.
+## Runtime Example
 
-**Core Flow (ASCII)**
+```ts
+import { createRuntime, InMemoryStore, type ModelProvider, type Tool } from '@bolt-ai/core';
+
+const provider: ModelProvider = {
+  id: 'mock:local',
+  supports: ['text', 'json'],
+  async call({ prompt }) {
+    return { output: `Answer: ${prompt}` };
+  },
+};
+
+const lookupTool: Tool<{ topic: string }, string> = {
+  id: 'local.kb.lookup',
+  schema: {
+    type: 'object',
+    properties: { topic: { type: 'string' } },
+    required: ['topic'],
+  },
+  async run(args) {
+    return `Facts about ${args.topic}`;
+  },
+};
+
+const runtime = createRuntime({
+  providers: [provider],
+  memory: new InMemoryStore(),
+  tools: [lookupTool],
+  agents: [
+    {
+      id: 'support',
+      capabilities: ['text'],
+      tools: ['local.kb.lookup'],
+      async run({ input, call, tools }) {
+        const lookup = tools.get('local.kb.lookup');
+        const facts = await lookup?.run({ topic: 'shipping' }, {});
+        return call({
+          kind: 'text',
+          prompt: `Question: ${JSON.stringify(input)}\nFacts: ${facts}`,
+        });
+      },
+    },
+  ],
+});
+
+const result = await runtime.run('support', { question: 'Where is my order?' });
+```
+
+## Runtime Flow
 
 ```
 +--------+      run/route      +----------------------+
 | USER   | ------------------> | BOLT RUNTIME         |
-+--------+                     | - agents + memory    |
-                               | - tools + results    |
++--------+                     | agents, tools        |
+                               | memory, router       |
                                +----------+-----------+
                                           |
                                           v
                                +----------------------+
                                | ROUTER               |
-                               | - provider select    |
-                               | - budget/redaction   |
+                               | provider select      |
+                               | budget/redaction     |
                                +----------+-----------+
                                           |
                                           v
                                +----------------------+
                                | AGENT                |
-                               | - scoped memory      |
-                               | - allowed tools only |
+                               | scoped memory        |
+                               | allowed tools only   |
                                +----------+-----------+
                                           |
                                           v
@@ -48,71 +89,80 @@
                                +----------------------+
 ```
 
-**Flow Explanation**
-The runtime is the public execution surface. It registers agents and tools, delegates provider selection to the router, passes traced memory into agent execution, and exposes only the tools declared by the running agent.
+## Main Exports
 
----
+- `createRuntime()` and `createBoltRuntime()`
+- `Router` and `createAppRouter()`
+- `InMemoryStore`
+- `Registry`
+- `runPlan()` and planner/runner types
+- `createOrchestrator()`
+- `discoverBoltDocs()`
+- shared types such as `Agent`, `Tool`, `ModelProvider`, `RunResult`, `Plan`, and `MemoryStore`
 
-**Install**
-
-```bash
-pnpm add @bolt-ai/core
-```
-
----
-
-**Usage**
+## Structured Results
 
 ```ts
-import { createRuntime, InMemoryStore } from '@bolt-ai/core';
-import { createGroqProvider } from '@bolt-ai/providers-groq';
-
-const runtime = createRuntime({
-  providers: [createGroqProvider()],
-  memory: new InMemoryStore(),
-  preset: 'auto',
-  agents: [supportAgent],
-  tools: [searchTool],
+const result = await runtime.run('support', input, {
+  throwOnError: false,
+  onToken(delta) {
+    process.stdout.write(delta);
+  },
 });
 
-const result = await runtime.run('support', { text: 'hello' });
+if (!result.ok) {
+  console.error(result.error?.message);
+}
 ```
 
----
+## Diagnostics
 
-**BOLT.md Instructions (Scoped Overrides)**
+```ts
+const info = await runtime.explain({
+  agentId: 'support',
+  input: { question: 'Hi' },
+});
 
-`BOLT.md` files provide directory‑scoped instructions. The nearest file wins by default. To inherit parent instructions, add frontmatter `extends: true`.
-
-```
-repo/
-  BOLT.md                  (root rules)
-  agents/
-    BOLT.md                (agent defaults)
-    support/
-      BOLT.md              (overrides by default)
-      support.md           (agent definition)
+console.log(info.provider);
+console.log(info.tools);
 ```
 
-With inheritance enabled:
+## Tool Governance
+
+Register every tool with the runtime, then declare the subset each agent may use.
+
+```ts
+const runtime = createRuntime({
+  providers: [provider],
+  tools: [lookupTool, httpTool],
+  agents: [
+    {
+      id: 'support',
+      capabilities: ['text'],
+      tools: ['local.kb.lookup'],
+      async run(ctx) {
+        return ctx.call({ kind: 'text', prompt: String(ctx.input) });
+      },
+    },
+  ],
+});
+```
+
+If a provider requests a tool outside the active agent allow-list, the router rejects the call.
+
+## BOLT.md
+
+`BOLT.md` files provide scoped instruction discovery.
 
 ```
-root BOLT.md  ->  agents/BOLT.md  ->  agents/support/BOLT.md
+repo/BOLT.md -> agents/BOLT.md -> agents/support/BOLT.md
 ```
 
-Markdown agents load `BOLT.md` automatically based on file location. For TS‑defined agents, set `boltDocs: true` or `boltDocs: { cwd: __dirname }` in the agent definition.
+The nearest file wins by default. Add frontmatter `extends: true` to inherit parent instructions.
 
----
+## More Docs
 
-**Roadmap**
-
-1. **v0.1.x (current)** — Router, Agents, Planner/Runner, Tools (web.search/http/mcp/vector), Memory (InMemory/Redis), Observability, Groq provider adapter, Next.js + React adapters.
-2. **v0.2** — Health pings, improved JSON validators, OpenAI/Anthropic/Google adapters, Azure/Mistral adapters, vector store adapters (Pinecone/pgvector/Redis), richer evaluators.
-3. **v0.3** — Multimodal/image tools, coding agent with diff patches, role‑based memory, CLI polish, recipe gallery.
-4. **v1.0** — Docs site, governance & audit hooks, cost/latency dashboard, hardened APIs.
-
----
-
-**License**
-
-MIT © Contributors to Bolt
+- Root `README.md` for the full 1.0 guide
+- `Docs/Planner.md` for deterministic workflow execution
+- `Docs/Tools.md` for built-in tool adapters
+- `examples/markdown-runtime/README.md` for a runnable Markdown runtime example

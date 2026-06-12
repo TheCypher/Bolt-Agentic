@@ -23,7 +23,7 @@ The planner produces a compact **Plan JSON** that captures this flow. The runner
                                                             |
                                               +-------------+-------------+
                                               |             |             |
-                                            Task()        Task()        Task()
+                                            STEP          STEP          STEP
                                               v             v             v
                                        +-----------+  +-----------+  +-----------+
                                        | MODEL     |  | TOOL      |  | MAP       |
@@ -48,7 +48,9 @@ The planner produces a JSON plan; the runner executes each step with retries, gu
 
 ## Orchestrator
 
-If you prefer a single entry point, use the orchestrator:
+Most applications should start with `runtime.run()` or `createMarkdownRuntime()`. Use the planner when a workflow must be deterministic across multiple model and tool steps.
+
+If you prefer a single entry point for plan generation and execution, use the orchestrator:
 
 ```
 +--------+      +---------------+      +---------+      +---------+

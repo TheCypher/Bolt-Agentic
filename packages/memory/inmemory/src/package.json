@@ -1,6 +1,6 @@
 {
   "name": "@bolt-ai/memory-inmemory",
-  "version": "0.0.13",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +9,7 @@
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
   },
   "peerDependencies": {
-    "@bolt-ai/core": ">=0.0.0"
+    "@bolt-ai/core": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": { "optional": false }
