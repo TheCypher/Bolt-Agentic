@@ -3,9 +3,9 @@
 Purpose: source of truth for feature scope and technical location. Update this file whenever you ship or adjust a feature, and mirror roadmap changes in `README.md` when applicable.
 
 ## Feature Catalog
-- What: Bolt-Agentic vNext rebuild handoff for the Markdown-agent runtime direction.
-- Where: `Docs/vNext-rebuild-handoff.md`.
-- Why: Establishes the rebuild north star, architecture constraints, phases, and MVP acceptance criteria for future implementation work.
+- What: Bolt Agentic 1.0 documentation and release metadata.
+- Where: `README.md`, `Docs/README.md`, `packages/core/README.md`, `CHANGELOG.md`, package manifests.
+- Why: Promotes the shipped Markdown-agent runtime from pre-1.0 docs to the stable 1.0 source of truth and removes deprecated pre-release guides.
 - What: `BoltRuntime` facade with structured `RunResult`, `run`, `route`, and `runParallel`.
 - Where: `packages/core/src/runtime.ts`, `packages/core/src/router.ts`, `packages/core/src/types.ts`, `packages/core/src/__tests__/runtime.test.ts`.
 - Why: Provides one headless runtime entry point over provider routing, memory, agents, and tool registration.

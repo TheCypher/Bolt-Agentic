@@ -1,6 +1,6 @@
 {
   "name": "@bolt-ai/providers-groq",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Groq model provider adapter for Bolt AI agents.",
   "license": "MIT",
   "author": "Bolt AI",
@@ -34,7 +34,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@bolt-ai/core": ">=0.1.0"
+    "@bolt-ai/core": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": { "optional": false }
