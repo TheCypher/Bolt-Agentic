@@ -1,7 +1,34 @@
 # Bolt Tools Guide
 
-> **Tools connect your agents and planners to the real world.**
-> They wrap side-effects (HTTP, DB, search, files, MCP servers) behind a typed interface the Runner can orchestrate with retries, branching, parallelism, and caching.
+> **Tools provide controlled access to external systems.**
+> They wrap side effects (HTTP, DB, search, files, MCP servers) behind a typed interface the runner can orchestrate with retries, branching, parallelism, and caching.
+
+**Tool Flow (ASCII)**
+
+```
++--------+      prompt       +----------------------+
+| USER   | --------------->  | MAIN AGENT           |
++--------+                   | - tool descriptions  |
+                             | - chooses tool steps |
+                             +----------+-----------+
+                                        |
+                                      Task()
+                                        |
+                                        v
+                              +-------------------+
+                              | TOOL STEP         |
+                              | http.fetch        |
+                              | vector.search     |
+                              +---------+---------+
+                                        |
+                                        v
+                              +-------------------+
+                              | TOOL RESULT       |
+                              +-------------------+
+```
+
+**Flow Explanation**
+Agents or planners select tools; the runner executes tool steps and returns structured results to plan outputs.
 
 ---
 
@@ -24,34 +51,34 @@ export interface Tool<TArgs = any, TOut = any> {
 }
 ```
 
-In practice, you’ll usually expose tools to the Runner as a map:
+In practice, tools are exposed to the runner as a map:
 
 ```ts
 type ToolFn = (args: any, ctx: RunnerContext) => Promise<any>;
 type ToolsMap = Record<string, ToolFn>;
 ```
 
-> The runner accepts a `tools` map in its context. You can build that map from simple functions or from richer `Tool` objects you register centrally.
+> The runner accepts a `tools` map in its context. Build the map from simple functions or from richer `Tool` objects registered centrally.
 
 ---
 
 ## When to Use Tools
 
-* **Call external APIs** (HTTP GET/POST, Slack, Stripe, your backend).
-* **Search** (SerpAPI, Tavily, internal search).
-* **Read data** (databases, vector stores).
-* **Kick off workflows** (queues, webhooks).
-* **Bridge to MCP servers** (local tools exposed via Model Context Protocol).
+- **Call external APIs** (HTTP GET/POST, Slack, Stripe, internal services).
+- **Search** (SerpAPI, Tavily, internal search).
+- **Read data** (databases, vector stores).
+- **Kick off workflows** (queues, webhooks).
+- **Bridge to MCP servers** (local tools exposed via Model Context Protocol).
 
-Tools keep effects **outside** of your agents and prompts—making flows testable, reusable, and safe.
+Tools keep effects **outside** of prompts, making flows testable, reusable, and safe.
 
 ---
 
 ## Ways to Provide Tools
 
-You have two common patterns:
+Two common patterns are shown below.
 
-### A) Ad-hoc per request (quickest)
+### A) Per-request map (minimal setup)
 
 Provide a map to `runPlan`:
 
@@ -66,7 +93,7 @@ const tools = {
 await runPlan(router, plan, { taskId, agentId, input, tools });
 ```
 
-### B) Register once (recommended for apps)
+### B) Central registration (recommended)
 
 Publish tools at app startup and pick them up everywhere.
 
@@ -118,9 +145,25 @@ await runPlan(router, plan, { taskId, agentId, input, tools: registry });
 
 ---
 
+## HTTP Tool Allow Lists
+
+The built-in HTTP tool supports allow lists to constrain outbound calls.
+
+```ts
+import { createHttpTool } from '@bolt-ai/tools';
+
+const httpTool = createHttpTool({
+  allow: ['https://api.example.com/*', 'https://docs.example.com/*']
+});
+```
+
+If a URL doesn’t match the allow list, the tool throws before making a request.
+
+---
+
 ## Default Tools You’ll Want
 
-Below are production-ready, real-world tools you can drop in.
+Below are production‑ready tools ready to use.
 
 ### 1) `http.fetch` – robust HTTP client (with timeout and AbortSignal)
 
@@ -220,6 +263,16 @@ g.__BOLT_TOOLS__ = {
 export {};
 ```
 
+To **restrict results to specific domains**, use the built‑in helper:
+
+```ts
+import { createWebSearchTool } from '@bolt-ai/tools';
+
+const webSearchTool = createWebSearchTool({
+  allowDomains: ['docs.example.com', 'api.example.com']
+});
+```
+
 **Example plan usage** (LLM or template):
 
 ```ts
@@ -230,18 +283,51 @@ export {};
 ```
 
 > Notice `${s1.results.0.url}`: our runner resolves that placeholder safely.
-> If you see “Invalid URL” errors, your previous tool didn’t return a proper URL (or you didn’t register the tool).
+> If “Invalid URL” errors occur, the previous tool did not return a valid URL or the tool was not registered.
 
-### 3) `mcp.call` – Call tools on a local MCP server
+### 3) `vector.search` – Vector store retrieval
+
+Use the built‑in helper to wrap a vector adapter (Pinecone, pgvector, Redis, etc.).
+
+```ts
+import { createVectorTool } from '@bolt-ai/tools';
+
+const vectorTool = createVectorTool({
+  async query({ query, topK = 5, filter, namespace }) {
+    return myVectorClient.search({ query, topK, filter, namespace });
+  }
+});
+```
+
+Register:
+
+```ts
+const g = globalThis as any;
+g.__BOLT_TOOLS__ = { ...(g.__BOLT_TOOLS__ || {}), 'vector.search': vectorTool };
+```
+
+**Template usage**:
+
+```ts
+steps: [
+  { id: 'retrieval', kind: 'tool', toolId: 'vector.search', args: { query: '${query}', topK: 5 } },
+  { id: 'summary', kind: 'model', agent: 'support', inputFrom: ['retrieval'] },
+],
+outputs: ['summary']
+```
+
+### 4) `mcp.call` – Call tools on a local MCP server
 
 > MCP (Model Context Protocol) exposes local/remote tools to LLM apps.
-> Bolt can wrap MCP exposed tools as Bolt tools.
+> Bolt ships a small wrapper; provide the MCP client implementation.
 
-Minimal conceptual wrapper (pseudo-ish; you can adapt to your MCP SDK):
+Minimal wrapper (adapt to your MCP SDK):
 
 ```ts
 // src/tools/mcp.ts
 import { z } from 'zod';
+import { createMcpTool } from '@bolt-ai/tools';
+
 // Suppose you have an MCP client that can call a named tool
 const mcp = createMcpClient({ command: 'node', args: ['path/to/server.js'] });
 
@@ -250,11 +336,9 @@ const McpArgs = z.object({
   params: z.record(z.any()).optional()
 });
 
-export async function mcpCall({ tool, params = {} }: z.infer<typeof McpArgs>) {
-  // Ensure your MCP client is connected/reused across calls
-  const out = await mcp.callTool(tool, params);
-  return out; // normalize as you like
-}
+export const mcpCall = createMcpTool({
+  callTool: (tool, args) => mcp.callTool(tool, args)
+});
 ```
 
 Register:
@@ -349,10 +433,10 @@ Guard with zod on the extraction step.
 
 ## Using Tools from Agents
 
-Agents can call tools directly if you want (outside of Planner) by keeping a `ToolRegistry`. For example:
+Agents can call tools directly (outside of the planner) by using a `ToolRegistry`. For example:
 
 ```ts
-// tiny registry helper
+// registry helper
 class Registry {
   private map = new Map<string, (a: any, c: any) => Promise<any>>();
   register(id: string, fn: (a: any, c: any) => Promise<any>) { this.map.set(id, fn); }
@@ -372,15 +456,15 @@ async run({ input, memory, call, tools }) {
 }
 ```
 
-> In most cases, prefer **Planner steps** for tool usage—so you can add guards, retries, parallelism, and show progress in UIs.
+> Prefer **planner steps** for tool usage to enable guards, retries, parallelism, and progress UIs.
 
 ---
 
 ## Safety, Auth, and Observability
 
-* **Auth:** Tools should read credentials from environment variables (e.g., `SERPAPI_KEY`). Never hardcode. For per-user secrets, look them up via your session and add them to the tool args at the API layer.
-* **Allowlist:** Use `ToolContext.allow` or your own checks to prevent unapproved usage (e.g., limit domains for `http.fetch`).
-* **Timeouts:** Implement per-tool timeouts (as shown). You can also set per-step `timeoutMs` in your plan.
+* **Auth:** Tools should read credentials from environment variables (e.g., `SERPAPI_KEY`). Do not hardcode. For per‑user secrets, fetch them from the session and add them to tool args at the API layer.
+* **Allow list:** Use `ToolContext.allow` or equivalent checks to prevent unapproved usage (e.g., limit domains for `http.fetch`).
+* **Timeouts:** Implement per‑tool timeouts (as shown). You can also set per‑step `timeoutMs` in the plan.
 * **Idempotency:** Tools that mutate state (payments, writes) should accept an idempotency key (we expose `idempotencyKey` on step types).
 * **Logging:** Use `onEvent` from `RunOptions` to log `step:start`, `step:retry`, `step:done`, etc.
 * **Caching:** Use `cacheKey: 'auto'` on expensive pure steps and pass a `StepCache` (e.g., `InMemoryStepCache`) to the Runner.
@@ -404,7 +488,7 @@ async run({ input, memory, call, tools }) {
 
 ## Quick Starter: Tools Registry Glue
 
-If you want a tiny helper to always merge default + app tools:
+To add a helper that always merges default + app tools:
 
 ```ts
 // src/tools/registry.ts
@@ -428,7 +512,7 @@ const result = await runPlan(router, plan, { taskId, agentId, input, tools: getT
 
 ## Make Your Own Tools
 
-A quick pattern you can copy for any external system:
+A reusable pattern for any external system:
 
 ```ts
 // src/tools/stripe.ts
@@ -477,4 +561,4 @@ Use it in a plan step:
 
 * Tools are **first-class** citizens in Bolt: define them once, use them from **templates**, **heuristics**, or **LLM-planned** flows.
 * They can be **parallelized**, **branched**, **retriable**, and **cached** by the Runner.
-* Encourage your team (or open-source community) to ship tools alongside agents and templates in each Next.js app. That’s how your AI system grows **capabilities** over time—safely and predictably.
+* Teams can ship tools alongside agents and templates in each Next.js app to expand capabilities safely and predictably.

@@ -31,6 +31,7 @@ export interface ModelProvider {
   id: string;
   supports: Capability[];
   call(args: ProviderCallArgs): Promise<ProviderResult>;
+  estimateCost?: (args: { tokens?: number; input?: ProviderCallArgs }) => number;
 }
 
 export interface ToolContext {
@@ -184,6 +185,13 @@ export type CostEstimator = (args: {
   tokens?: number;
 }) => number;
 
+export type ScoreScorer = (args: {
+  value: any;
+  step: PlanStep;
+  input: any;
+  outputs: Record<string, any>;
+}) => number | Promise<number>;
+
 export interface RunOptions {
   maxConcurrency?: number;
   onEvent?: (e: RunnerEvent) => void;
@@ -191,4 +199,6 @@ export interface RunOptions {
   defaultStepTTLSeconds?: number;
   stepTimeoutMs?: number;
   budget?: Budget;
+  costEstimator?: CostEstimator;
+  scorers?: Partial<Record<NonNullable<Guard['scoreCheck']>['scorer'], ScoreScorer>>;
 }

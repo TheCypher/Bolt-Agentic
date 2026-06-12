@@ -1,6 +1,7 @@
 // packages/next/src/router.ts
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import fs from "node:fs/promises";
 import fg from "fast-glob";
 
 import {
@@ -8,9 +9,15 @@ import {
   EventBus,
   InMemoryStore,
 } from "@bolt-ai/core";
+import { createAgentFromMarkdown } from "@bolt-ai/agents";
 import type {
   AppRouter,
+  Budget,
+  CircuitBreakerOptions,
   ModelProvider,
+  ProviderPreset,
+  RedactionOptions,
+  RouteCostEstimator,
   Agent,
   MemoryStore,
 } from "@bolt-ai/core";
@@ -18,9 +25,21 @@ import type { Template } from "@bolt-ai/core";
 
 export type NextCreateOptions = {
   /** Policy preset for the core router */
-  preset?: "fast" | "cheap" | "strict";
+  preset?: ProviderPreset;
+  /** Explicit provider order (id list). Overrides BOLT_PROVIDER_ORDER. */
+  providerOrder?: string[];
   /** Provide providers explicitly (skips auto-detect) */
   providers?: ModelProvider[];
+  /** Circuit breaker for provider failures */
+  circuitBreaker?: CircuitBreakerOptions;
+  /** Route-level budget enforcement */
+  budget?: Budget;
+  /** Route-level cost estimator */
+  costEstimator?: RouteCostEstimator;
+  /** Redaction policy for prompts */
+  redaction?: RedactionOptions;
+  /** Optional classifier used when preset = "auto" */
+  classify?: (input: unknown, agent?: Agent) => Exclude<ProviderPreset, "auto">;
   /** In-app agents directory (relative to process.cwd(), e.g. 'agents') */
   agentsDir?: string;
   /** Explicit agents map (alternative to agentsDir) */
@@ -90,6 +109,13 @@ export async function createAppRouter(
     providers,
     events,
     memory,
+    preset: opts.preset,
+    providerOrder: opts.providerOrder,
+    circuitBreaker: opts.circuitBreaker,
+    budget: opts.budget,
+    costEstimator: opts.costEstimator,
+    redaction: opts.redaction,
+    classify: opts.classify,
   });
 
   // ====== Agents ======
@@ -98,16 +124,24 @@ export async function createAppRouter(
   if (opts.agents && Object.keys(opts.agents).length) {
     (router as any).registerAgents?.(opts.agents);
   } else {
-    // 2) Global publish
-    const g = globalThis as any;
-    const published = g.__BOLT_AGENTS__ || g.__BOLT_AGENTS || {};
-    if (published && Object.keys(published).length) {
-      (router as any).registerAgents?.(published);
-    } else if (opts.agentsDir) {
-      // 3) Discover compiled or plain JS agents
+    // 2) Discover from agentsDir (preferred)
+    if (opts.agentsDir) {
       const discovered = await discoverAgents(opts.agentsDir);
       if (Object.keys(discovered).length) {
         (router as any).registerAgents?.(discovered);
+      } else {
+        const g = globalThis as any;
+        const published = g.__BOLT_AGENTS__ || g.__BOLT_AGENTS || {};
+        if (published && Object.keys(published).length) {
+          (router as any).registerAgents?.(published);
+        }
+      }
+    } else {
+      // 3) Global publish (fallback)
+      const g = globalThis as any;
+      const published = g.__BOLT_AGENTS__ || g.__BOLT_AGENTS || {};
+      if (published && Object.keys(published).length) {
+        (router as any).registerAgents?.(published);
       }
     }
   }
@@ -158,6 +192,7 @@ export async function createAppRouter(
 async function discoverAgents(agentsDir: string): Promise<Record<string, Agent>> {
   const root = process.cwd();
   let files: string[] = [];
+  let mdFiles: string[] = [];
 
   // 1) Prefer compiled JS under .next/server/app/<agentsDir>/**
   try {
@@ -189,6 +224,24 @@ async function discoverAgents(agentsDir: string): Promise<Record<string, Agent>>
       }
     } catch {
       // skip bad files
+    }
+  }
+
+  // 3) Markdown agents in <agentsDir> (*.md with frontmatter id)
+  try {
+    const srcDir = path.join(root, agentsDir);
+    mdFiles = await fg(["**/*.md", "**/*.mdx"], { cwd: srcDir, absolute: true });
+  } catch {
+    /* ignore */
+  }
+
+  for (const file of mdFiles) {
+    try {
+      const raw = await fs.readFile(file, "utf8");
+      const agent = createAgentFromMarkdown(raw, { filePath: file });
+      if (!agents[agent.id]) agents[agent.id] = agent;
+    } catch {
+      // skip bad or non-agent markdown
     }
   }
   return agents;
