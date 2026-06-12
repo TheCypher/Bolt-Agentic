@@ -1,6 +1,6 @@
 {
   "name": "@bolt-ai/next",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "description": "Next.js integration helpers for Bolt AI agents.",
   "license": "MIT",
   "author": "Bolt AI",
@@ -35,12 +35,14 @@
   },
   "peerDependencies": {
     "next": ">=13.4.0",
-    "@bolt-ai/core": ">=0.0.14",
-    "@bolt-ai/memory-redis": ">=0.0.14",
-    "@bolt-ai/providers-groq": ">=0.0.14"
+    "@bolt-ai/core": ">=0.1.0",
+    "@bolt-ai/agents": ">=0.1.0",
+    "@bolt-ai/memory-redis": ">=0.1.0",
+    "@bolt-ai/providers-groq": ">=0.1.0"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": { "optional": false },
+    "@bolt-ai/agents": { "optional": false },
     "@bolt-ai/memory-redis": { "optional": true },
     "@bolt-ai/providers-groq": { "optional": true }
   },
@@ -49,6 +51,7 @@
   },
   "devDependencies": {
     "@bolt-ai/core": "workspace:*",
+    "@bolt-ai/agents": "workspace:*",
     "@bolt-ai/memory-redis": "workspace:*",
     "@bolt-ai/providers-groq": "workspace:*",
     "next": "^14.2.0",

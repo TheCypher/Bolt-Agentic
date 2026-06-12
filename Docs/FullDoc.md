@@ -1,28 +1,24 @@
 # Bolt — Full Library Guide
 
-> Build reliable, testable AI apps.
-> Bolt gives you **agents**, a **router**, a typed **planner + runner** DSL, **tools**, and **memory** — with Next.js-friendly adapters and observability.
+> Build reliable, testable AI applications.
+> Bolt provides **agents**, a **router**, a typed **planner + runner** DSL, an **orchestrator**, **tools**, and **memory** with Next.js adapters and observability.
 
 ---
 
-## What’s in the box
+## Included Packages
 
 ### Packages
 
-* **`@bolt-ai/core`**
-  Types, Router, Planner+Runner DSL, EventBus, Tools registry, Memory interface.
-* **`@bolt-ai/next`**
-  Next.js adapter (`createAppRouter`), SSE helpers, agent/template auto-discovery.
-* **`@bolt-ai/providers-groq`**
-  Groq provider; more providers can be added similarly.
-* **`@bolt-ai/memory-redis`** (optional)
-  Redis-backed `MemoryStore` with auto-detection via `REDIS_URL`.
+- **`@bolt-ai/core`** — Types, router, planner/runner DSL, orchestrator, event bus, tool registry, memory interface.
+- **`@bolt-ai/next`** — Next.js adapter (`createAppRouter`), SSE helpers, agent/template auto‑discovery.
+- **`@bolt-ai/providers-groq`** — Groq provider adapter.
+- **`@bolt-ai/memory-redis`** (optional) — Redis‑backed `MemoryStore` with auto‑detection via `REDIS_URL`.
 
 ---
 
-## Quick Start (Next.js app)
+## Quick Start (Next.js App Router)
 
-**Install** (from your private tarballs or registry):
+**Install**:
 
 ```bash
 pnpm add @bolt-ai/core @bolt-ai/next @bolt-ai/providers-groq
@@ -30,7 +26,7 @@ pnpm add @bolt-ai/core @bolt-ai/next @bolt-ai/providers-groq
 pnpm add @bolt-ai/memory-redis redis
 ```
 
-**Env** (e.g. `.env.local`):
+**Env** (e.g., `.env.local`):
 
 ```bash
 GROQ_API_KEY=...
@@ -41,10 +37,15 @@ REDIS_URL=rediss://default:***@your-redis-host:6379
 **Project structure (suggested)**
 
 ```
+
+For an end‑to‑end complex agent example, see `Docs/ExampleAgent.md`.
 src/
+  BOLT.md
   agents/
+    BOLT.md
     support.ts
     planner.ts
+    support.md
     index.ts           # publishes agents globally
   templates/
     weekly-report.ts
@@ -71,11 +72,80 @@ src/
 
 ---
 
+## BOLT.md instructions (scoped overrides)
+
+BOLT.md files provide **directory-scoped instructions**. The **nearest BOLT.md wins by default**.
+Add frontmatter `extends: true` to inherit parent instructions.
+
+```
+repo/
+  BOLT.md
+  agents/
+    BOLT.md
+    support/
+      BOLT.md
+      support.md
+```
+
+Chain with `extends: true`:
+
+```
+root BOLT.md  ->  agents/BOLT.md  ->  agents/support/BOLT.md
+```
+
+Markdown agents load BOLT.md automatically by file location. For TS-defined agents, set
+`boltDocs: true` or `boltDocs: { cwd: __dirname }`.
+
+---
+
 ## Core Concepts
 
 ### 1) Router
 
 The **AppRouter** orchestrates agents, tools, memory, and providers.
+
+**Router Flow (ASCII)**
+
+```
++--------+      prompt       +----------------------+
+| USER   | --------------->  | ROUTER               |
++--------+                   | - policy/preset      |
+                             | - provider select    |
+                             | - BOLT.md rules      |
+                             +----------+-----------+
+                                        |
+                                        v
++--------------------------------------------------------------+
+|                         MAIN AGENT                           |
+| - System prompt + tool descriptions + reminders              |
+| - Orchestrates subagents via Task()                          |
++-----------+-----------+-----------+-----------+--------------+
+            |           |           |           |
+          Task()      Task()      Task()      Task()
+            v           v           v           v
++-------------+ +-------------+ +-------------+ +-------------+
+| EXPLORE     | | PLAN        | | EXECUTE     | | VALIDATE    |
+| read-only   | | plan DSL    | | tools + run | | scorers     |
+| tools: rg   | | all tools   | | http/web    | | checks      |
++-------------+ +-------------+ +-------------+ +-------------+
+            \         |           |         /
+             \________|___________|________/
+                      |
+              results (hidden)
+                      v
++--------------------------------------------------------------+
+|                         MAIN AGENT                           |
+| summarizes + responds to user                                |
++--------------------------------------------------------------+
+                      |
+                      v
++--------+
+| USER   |
++--------+
+```
+
+**Flow Explanation**
+The router resolves the agent, selects a provider, and executes the agent with access to memory and tools.
 
 ```ts
 // src/lib/bolt-router.ts
@@ -85,21 +155,44 @@ import '@/templates';  // side-effect: publish templates to globalThis
 import '@/tools/defaults'; // side-effect: register tools
 
 export const routerPromise = createAppRouter({
-  preset: 'fast',            // policy preset (if your build supports it)
+  preset: 'auto',            // policy preset (auto picks strict for sensitive input)
   agentsDir: 'agents',       // auto-discovery fallback
   templatesDir: 'templates', // auto-discovery fallback
+  circuitBreaker: { failureThreshold: 2, cooldownMs: 30_000 },
+  budget: { maxLatencyMs: 8_000, maxCostUSD: 0.25 },
+  redaction: { enabled: true },
   // memory: createRedisMemoryStore(), // OR let adapter auto-pick if REDIS_URL set
 });
 ```
 
 * **Providers**: If `GROQ_API_KEY` is set and `@bolt-ai/providers-groq` is installed, the Next adapter auto-registers a Groq provider.
 * **Memory**: Defaults to `InMemoryStore`. If `REDIS_URL` exists and `@bolt-ai/memory-redis` is installed, the adapter will try to use Redis.
+* **Agents**: Next auto-discovers compiled JS and markdown agents under `agentsDir`.
+* **Routing**: Provider selection respects agent capabilities and uses the first matching provider
+  in the configured order (`providerOrder` or `BOLT_PROVIDER_ORDER`). Presets apply default ordering
+  when no explicit order is provided. `preset: 'auto'` uses a lightweight classifier to pick strict
+  ordering for sensitive input (medical/legal/finance).
+
+Per-request overrides (optional):
+
+```ts
+await router.route({
+  id: 'req-1',
+  agentId: 'support',
+  input: {
+    __bolt: { preset: 'strict' },
+    text: 'Review these symptoms...'
+  }
+});
+```
+
+> The `__bolt` block is treated as a routing hint and is not passed into the agent input.
 
 **Explain & events (observability):**
 
 ```ts
 const router = await routerPromise;
-const { providers, tools } = router.explain({ agentId: 'support', input: 'Hi' });
+const { providers } = router.explain({ agentId: 'support', input: 'Hi' });
 router.events.subscribe((e) => console.log('[trace]', e));
 ```
 
@@ -123,6 +216,41 @@ export default defineAgent({
     });
   }
 });
+```
+
+**Agent Flow (ASCII)**
+
+```
++--------+      context       +--------------------------+      call      +-----------+
+| INPUT  | --------------->   | MAIN AGENT               | ----------->  | PROVIDER  |
++--------+                    | - system + history       |               +-----+-----+
+                              | - tools + BOLT.md rules  |                     |
+                              +-----------+--------------+                     v
+                                          |                             +-----------+
+                                          v                             | OUTPUT    |
+                                  +---------------+                     +-----------+
+                                  | MEMORY        |
+                                  | read / write  |
+                                  +---------------+
+```
+
+**Flow Explanation**
+Agents turn inputs and context into prompts, call the provider, and optionally read/write memory.
+
+**Markdown agent (auto BOLT.md instructions):**
+
+```markdown
+---
+id: support
+description: Concise, helpful assistant
+boltDocs: true
+---
+
+## System
+Helpful answers only.
+
+## User
+User: {{input}}
 ```
 
 **LLM Planner agent (optional):**
@@ -159,12 +287,42 @@ g.__BOLT_AGENTS__ = { ...(g.__BOLT_AGENTS__ || {}), [support.id]: support, [plan
 export {};
 ```
 
+> `__BOLT_AGENTS__` is a fallback for bundling in Next. The adapter prefers file discovery
+> via `agentsDir` (compiled JS or markdown) when available.
+
 ### 3) Tools
 
 # Bolt Tools Guide
 
-> **Tools connect your agents and planners to the real world.**
-> They wrap side-effects (HTTP, DB, search, files, MCP servers) behind a typed interface the Runner can orchestrate with retries, branching, parallelism, and caching.
+> **Tools provide controlled access to external systems.**
+> They wrap side effects (HTTP, DB, search, files, MCP servers) behind a typed interface the runner can orchestrate with retries, branching, parallelism, and caching.
+
+**Tool Flow (ASCII)**
+
+```
++--------+      prompt       +----------------------+
+| USER   | --------------->  | MAIN AGENT           |
++--------+                   | - tool descriptions  |
+                             | - chooses tool steps |
+                             +----------+-----------+
+                                        |
+                                      Task()
+                                        |
+                                        v
+                              +-------------------+
+                              | TOOL STEP         |
+                              | http.fetch        |
+                              | vector.search     |
+                              +---------+---------+
+                                        |
+                                        v
+                              +-------------------+
+                              | TOOL RESULT       |
+                              +-------------------+
+```
+
+**Flow Explanation**
+Agents or planners select tools; the runner executes tool steps and returns structured results back into the plan.
 
 ---
 
@@ -187,14 +345,14 @@ export interface Tool<TArgs = any, TOut = any> {
 }
 ```
 
-In practice, you’ll usually expose tools to the Runner as a map:
+In practice, tools are exposed to the runner as a map:
 
 ```ts
 type ToolFn = (args: any, ctx: RunnerContext) => Promise<any>;
 type ToolsMap = Record<string, ToolFn>;
 ```
 
-> The runner accepts a `tools` map in its context. You can build that map from simple functions or from richer `Tool` objects you register centrally.
+> The runner accepts a `tools` map in its context. Build the map from simple functions or from richer `Tool` objects registered centrally.
 
 ---
 
@@ -212,9 +370,9 @@ Tools keep effects **outside** of your agents and prompts—making flows testabl
 
 ## Ways to Provide Tools
 
-You have two common patterns:
+Two common patterns are shown below.
 
-### A) Ad-hoc per request (quickest)
+### A) Per-request map (minimal setup)
 
 Provide a map to `runPlan`:
 
@@ -229,7 +387,7 @@ const tools = {
 await runPlan(router, plan, { taskId, agentId, input, tools });
 ```
 
-### B) Register once (recommended for apps)
+### B) Central registration (recommended)
 
 Publish tools at app startup and pick them up everywhere.
 
@@ -277,13 +435,13 @@ const registry = (g.__BOLT_TOOLS__ || {}) as Record<string, (args: any, ctx: any
 await runPlan(router, plan, { taskId, agentId, input, tools: registry });
 ```
 
-> You can also provide a helper `getTools()` that merges **default** tools with **app** tools.
+> You can provide a helper `getTools()` that merges **default** tools with **app** tools.
 
 ---
 
 ## Default Tools You’ll Want
 
-Below are production-ready, real-world tools you can drop in.
+Below are production‑ready tools ready to use.
 
 ### 1) `http.fetch` – robust HTTP client (with timeout and AbortSignal)
 
@@ -383,6 +541,16 @@ g.__BOLT_TOOLS__ = {
 export {};
 ```
 
+To **restrict results to specific domains**, use the built‑in helper:
+
+```ts
+import { createWebSearchTool } from '@bolt-ai/tools';
+
+const webSearchTool = createWebSearchTool({
+  allowDomains: ['docs.example.com', 'api.example.com']
+});
+```
+
 **Example plan usage** (LLM or template):
 
 ```ts
@@ -395,16 +563,49 @@ export {};
 > Notice `${s1.results.0.url}`: our runner resolves that placeholder safely.
 > If you see “Invalid URL” errors, your previous tool didn’t return a proper URL (or you didn’t register the tool).
 
-### 3) `mcp.call` – Call tools on a local MCP server
+### 3) `vector.search` – Vector store retrieval
+
+Use the built‑in helper to wrap your vector adapter (Pinecone, pgvector, Redis, etc.).
+
+```ts
+import { createVectorTool } from '@bolt-ai/tools';
+
+const vectorTool = createVectorTool({
+  async query({ query, topK = 5, filter, namespace }) {
+    return myVectorClient.search({ query, topK, filter, namespace });
+  }
+});
+```
+
+Register:
+
+```ts
+const g = globalThis as any;
+g.__BOLT_TOOLS__ = { ...(g.__BOLT_TOOLS__ || {}), 'vector.search': vectorTool };
+```
+
+**Template usage**:
+
+```ts
+steps: [
+  { id: 'retrieval', kind: 'tool', toolId: 'vector.search', args: { query: '${query}', topK: 5 } },
+  { id: 'summary', kind: 'model', agent: 'support', inputFrom: ['retrieval'] },
+],
+outputs: ['summary']
+```
+
+### 4) `mcp.call` – Call tools on a local MCP server
 
 > MCP (Model Context Protocol) exposes local/remote tools to LLM apps.
-> Bolt can wrap MCP exposed tools as Bolt tools.
+> Bolt ships a small wrapper; you provide the MCP client implementation.
 
-Minimal conceptual wrapper (pseudo-ish; you can adapt to your MCP SDK):
+Minimal wrapper (adapt to your MCP SDK):
 
 ```ts
 // src/tools/mcp.ts
 import { z } from 'zod';
+import { createMcpTool } from '@bolt-ai/tools';
+
 // Suppose you have an MCP client that can call a named tool
 const mcp = createMcpClient({ command: 'node', args: ['path/to/server.js'] });
 
@@ -413,11 +614,9 @@ const McpArgs = z.object({
   params: z.record(z.any()).optional()
 });
 
-export async function mcpCall({ tool, params = {} }: z.infer<typeof McpArgs>) {
-  // Ensure your MCP client is connected/reused across calls
-  const out = await mcp.callTool(tool, params);
-  return out; // normalize as you like
-}
+export const mcpCall = createMcpTool({
+  callTool: (tool, args) => mcp.callTool(tool, args)
+});
 ```
 
 Register:
@@ -512,10 +711,10 @@ Guard with zod on the extraction step.
 
 ## Using Tools from Agents
 
-Agents can call tools directly if you want (outside of Planner) by keeping a `ToolRegistry`. For example:
+Agents can call tools directly (outside of the planner) by using a `ToolRegistry`. For example:
 
 ```ts
-// tiny registry helper
+// registry helper
 class Registry {
   private map = new Map<string, (a: any, c: any) => Promise<any>>();
   register(id: string, fn: (a: any, c: any) => Promise<any>) { this.map.set(id, fn); }
@@ -535,7 +734,7 @@ async run({ input, memory, call, tools }) {
 }
 ```
 
-> In most cases, prefer **Planner steps** for tool usage—so you can add guards, retries, parallelism, and show progress in UIs.
+> Prefer **planner steps** for tool usage to enable guards, retries, parallelism, and progress UIs.
 
 ---
 
@@ -543,7 +742,7 @@ async run({ input, memory, call, tools }) {
 
 * **Auth:** Tools should read credentials from environment variables (e.g., `SERPAPI_KEY`). Never hardcode. For per-user secrets, look them up via your session and add them to the tool args at the API layer.
 * **Allowlist:** Use `ToolContext.allow` or your own checks to prevent unapproved usage (e.g., limit domains for `http.fetch`).
-* **Timeouts:** Implement per-tool timeouts (as shown). You can also set per-step `timeoutMs` in your plan.
+* **Timeouts:** Implement per‑tool timeouts (as shown). You can also set per‑step `timeoutMs` in the plan.
 * **Idempotency:** Tools that mutate state (payments, writes) should accept an idempotency key (we expose `idempotencyKey` on step types).
 * **Logging:** Use `onEvent` from `RunOptions` to log `step:start`, `step:retry`, `step:done`, etc.
 * **Caching:** Use `cacheKey: 'auto'` on expensive pure steps and pass a `StepCache` (e.g., `InMemoryStepCache`) to the Runner.
@@ -567,7 +766,7 @@ async run({ input, memory, call, tools }) {
 
 ## Quick Starter: Tools Registry Glue
 
-If you want a tiny helper to always merge default + app tools:
+To add a helper that always merges default + app tools:
 
 ```ts
 // src/tools/registry.ts
@@ -591,7 +790,7 @@ const result = await runPlan(router, plan, { taskId, agentId, input, tools: getT
 
 ## Make Your Own Tools
 
-A quick pattern you can copy for any external system:
+A reusable pattern for any external system:
 
 ```ts
 // src/tools/stripe.ts
@@ -640,12 +839,42 @@ Use it in a plan step:
 
 * Tools are **first-class** citizens in Bolt: define them once, use them from **templates**, **heuristics**, or **LLM-planned** flows.
 * They can be **parallelized**, **branched**, **retriable**, and **cached** by the Runner.
-* Encourage your team (or open-source community) to ship tools alongside agents and templates in each Next.js app. That’s how your AI system grows **capabilities** over time—safely and predictably.
+* Teams can ship tools alongside agents and templates in each Next.js app to expand capabilities safely and predictably.
 
 
 ### 4) Planner + Runner DSL
 
 Bolt describes workflows as a **Plan** — a small JSON graph the **runner** executes deterministically.
+
+**Plan Execution Flow (ASCII)**
+
+```
++--------+          +----------+          +---------+          +---------+
+| INPUT  | -------> | PLANNER  | -------> |  PLAN   | -------> | RUNNER  |
++--------+          +----------+          +---------+          +----+----+
+                                                            |
+                                              +-------------+-------------+
+                                              |             |             |
+                                            Task()        Task()        Task()
+                                              v             v             v
+                                       +-----------+  +-----------+  +-----------+
+                                       | MODEL     |  | TOOL      |  | BRANCH    |
+                                       +-----------+  +-----------+  +-----------+
+                                              \           |           /
+                                               \__________|__________/
+                                                          |
+                                                 +-----------------+
+                                                 | FINAL OUTPUTS   |
+                                                 +-----------------+
+
+                             +------------------------------+
+                             | GUARD / RETRY / CACHE        |
+                             | applied per step by runner   |
+                             +------------------------------+
+```
+
+**Flow Explanation**
+Plans are just JSON; the runner executes each step and enforces guards, retries, and caching.
 
 Supported step kinds:
 
@@ -819,7 +1048,7 @@ export async function POST(req: Request) {
 }
 ```
 
-**Real-world uses**: quick summaries, simple comparisons, one-shot answers.
+**Examples**: concise summaries, simple comparisons, one‑shot answers.
 
 ---
 
@@ -1069,7 +1298,8 @@ test('weekly-report template runs', async () => {
 
 * **Tools** run server-side. Keep them safe: validate args, sanitize headers, enforce domain allow-lists.
 * **Timeouts**: The default runner treats `timeoutMs` as a hint; enforce timeouts inside tools (AbortController) or extend the runner to hard-cancel.
-* **Redaction**: If you log traces, redact secrets (add a redactor in `RouterOptions.redact`).
+* **Redaction**: If you log traces, redact secrets (configure `RouterOptions.redaction`).
+* **Budgets & circuit breaker**: Set `budget` and `circuitBreaker` on the router to cap latency/cost and skip unhealthy providers.
 * **Memory**: Use Redis in prod to share state across instances.
 * **Caching**: Use `cacheKey: 'auto'` + a `StepCache` for expensive/pure steps.
 
@@ -1087,7 +1317,7 @@ test('weekly-report template runs', async () => {
 
 ## Why Bolt?
 
-* **Deterministic workflows** when you want them (templates).
+* **Deterministic workflows** where required (templates).
 * **Flexible** for open-ended asks (LLM planner).
 * **Typed** plan DSL → easy to test, snapshot, and render (DAG).
 * **Composable**: mix agents, tools, branches, maps, parallel fan-out.

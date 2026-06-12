@@ -15,14 +15,35 @@ export interface ProviderCallArgs {
   prompt?: string;
   schema?: any;        // zod or JSON schema
   input?: unknown;     // when not prompt-driven
+  tools?: ProviderToolDefinition[];
+  toolResults?: ProviderToolResult[];
   stream?: boolean;
   /** Called with incremental text tokens (if provider supports streaming) */
   onToken?: (delta: string) => void;
   metadata?: Record<string, any>;
 }
 
-export interface ProviderResult<T = any> {
+export interface ProviderToolCall {
+  id?: string;
+  toolId: string;
+  args?: unknown;
+}
+
+export interface ProviderToolDefinition {
+  id: string;
+  description?: string;
+  schema?: any;
+}
+
+export interface ProviderToolResult<T = any> {
+  id: string;
+  toolId: string;
   output: T;
+}
+
+export interface ProviderResult<T = any> {
+  output?: T;
+  toolCalls?: ProviderToolCall[];
   tokens?: number;     // optional token count for budgeting
   trace?: any;
 }
@@ -31,6 +52,7 @@ export interface ModelProvider {
   id: string;
   supports: Capability[];
   call(args: ProviderCallArgs): Promise<ProviderResult>;
+  estimateCost?: (args: { tokens?: number; input?: ProviderCallArgs }) => number;
 }
 
 export interface ToolContext {
@@ -141,6 +163,7 @@ export interface Agent {
   id: string;
   description?: string;
   capabilities: Capability[];
+  tools?: string[];
   outputSchema?: any;
   run(ctx: AgentCtx): Promise<any>;
 }
@@ -184,6 +207,13 @@ export type CostEstimator = (args: {
   tokens?: number;
 }) => number;
 
+export type ScoreScorer = (args: {
+  value: any;
+  step: PlanStep;
+  input: any;
+  outputs: Record<string, any>;
+}) => number | Promise<number>;
+
 export interface RunOptions {
   maxConcurrency?: number;
   onEvent?: (e: RunnerEvent) => void;
@@ -191,4 +221,6 @@ export interface RunOptions {
   defaultStepTTLSeconds?: number;
   stepTimeoutMs?: number;
   budget?: Budget;
+  costEstimator?: CostEstimator;
+  scorers?: Partial<Record<NonNullable<Guard['scoreCheck']>['scorer'], ScoreScorer>>;
 }

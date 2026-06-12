@@ -1,6 +1,6 @@
 {
   "name": "@bolt-ai/tools",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "description": "Built-in tool implementations for Bolt AI agents.",
   "license": "MIT",
   "author": "Bolt AI",
@@ -38,7 +38,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@bolt-ai/core": ">=0.0.14"
+    "@bolt-ai/core": ">=0.1.0"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": {

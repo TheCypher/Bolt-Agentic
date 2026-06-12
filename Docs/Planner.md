@@ -1,29 +1,86 @@
 # Bolt Planner Guide
 
-> **Make agent workflows reliable, testable, and composable.**
-> The Planner turns a vague goal into a concrete sequence of steps that the **Runner** executes with retries, validation, parallelism, mapping, branching, and optional caching.
+> **Design deterministic agent workflows that are reliable and testable.**
+> The planner converts a goal into a concrete sequence of steps that the **runner** executes with retries, validation, parallelism, mapping, branching, and optional caching.
 
 ---
 
 ## Why the Planner?
 
-Most real apps are not “one prompt.” They are **workflows**:
+Most production systems require **workflows**, not a single prompt:
 
-* Gather context → call tools/APIs → validate/clean → synthesize → notify/store.
-* You want **reliability** (retries, guards), **speed** (parallel fan-out), **control** (deterministic steps), and **observability** (events to drive UIs).
+- Gather context → call tools/APIs → validate/clean → synthesize → notify/store.
+- Requirements include **reliability** (retries, guards), **speed** (parallel fan‑out), **control** (deterministic steps), and **observability** (events to drive UIs).
 
-The Planner gives you a small **Plan JSON** that captures this flow. The Runner then executes it deterministically and emits events you can stream to the client for progress/DAG UIs.
+The planner produces a compact **Plan JSON** that captures this flow. The runner executes it deterministically and emits events suitable for progress or DAG UIs.
+
+**Planner Flow (ASCII)**
+
+```
++--------+          +----------+          +---------+          +---------+
+| GOAL   | -------> | PLANNER  | -------> |  PLAN   | -------> | RUNNER  |
++--------+          +----------+          +---------+          +----+----+
+                                                            |
+                                              +-------------+-------------+
+                                              |             |             |
+                                            Task()        Task()        Task()
+                                              v             v             v
+                                       +-----------+  +-----------+  +-----------+
+                                       | MODEL     |  | TOOL      |  | MAP       |
+                                       +-----------+  +-----------+  +-----------+
+                                              \           |           /
+                                               \__________|__________/
+                                                          |
+                                                 +-----------------+
+                                                 | FINAL OUTPUTS   |
+                                                 +-----------------+
+
+                             +------------------------------+
+                             | GUARD / RETRY / CACHE        |
+                             | applied per step by runner   |
+                             +------------------------------+
+```
+
+**Flow Explanation**
+The planner produces a JSON plan; the runner executes each step with retries, guards, and caching.
 
 ---
 
-## What you can build
+## Orchestrator
 
-* **Single step** tasks (degenerates to one model call).
-* **Multi-step** flows mixing **model** and **tool** steps.
-* **Parallel** fan-out (`parallel`) for independent steps.
-* **Map** an array (`map`) with per-map concurrency.
-* **Branch** conditionally (`branch`) on structured conditions.
-* **Guards** to validate outputs, **retries** with backoff, and **caching** per step.
+If you prefer a single entry point, use the orchestrator:
+
+```
++--------+      +---------------+      +---------+      +---------+
+| GOAL   | ---> | ORCHESTRATOR  | ---> |  PLAN   | ---> | RUNNER  |
++--------+      | planner+run   |      +---------+      +---------+
+                          |
+                          v
+                    +-----------+
+                    | OUTPUTS   |
+                    +-----------+
+```
+
+**Flow Explanation**
+The orchestrator chooses a planner (heuristic or LLM) and immediately runs the resulting plan.
+
+```ts
+import { createOrchestrator } from '@bolt-ai/core';
+
+const orchestrator = createOrchestrator(router, { planner: 'heuristic' });
+const result = await orchestrator.run({ agentId: 'support', input: 'Draft a brief' });
+```
+
+---
+
+## Capabilities
+
+- **Single‑step** tasks (one model call).
+- **Multi‑step** flows combining **model** and **tool** steps.
+- **Parallel** fan‑out (`parallel`) for independent steps.
+- **Map** over arrays (`map`) with per‑map concurrency.
+- **Branch** conditionally (`branch`) on structured conditions.
+- **Guards**, **retries**, and **caching** per step.
 
 ---
 
@@ -122,10 +179,14 @@ export interface RunOptions {
   onEvent?: (e: RunnerEvent) => void;
   cache?: StepCache | null;       // optional per-step cache
   defaultStepTTLSeconds?: number; // default 300
+  budget?: { maxLatencyMs?: number; maxCostUSD?: number };
+  costEstimator?: (args: { step: PlanStep; result: any; tokens?: number }) => number;
+  scorers?: { consistency?: (args: any) => number; toxicity?: (args: any) => number; grounding?: (args: any) => number };
 }
 ```
 
-> The repo ships **`InMemoryStepCache`** (great for demos & tests).
+> The repo ships **`InMemoryStepCache`** (useful for demos and tests). Score checks require passing
+> a scorer in `RunOptions.scorers` and cost budgets require a `costEstimator`.
 
 ---
 
@@ -134,17 +195,17 @@ export interface RunOptions {
 1. **Templates** *(deterministic, testable)*
    You hand-author a function that returns a `Plan`. Best for **known, repeatable** business flows you want to unit test.
 
-   **Real world:** Weekly ops report, invoice intake, bulk URL checker, onboarding workflows.
+   **Examples:** Weekly ops report, invoice intake, bulk URL checker, onboarding workflows.
 
 2. **Heuristic planner** *(built-in)*
-   A tiny auto-planner for simple tasks, including “**compare A vs B**”. Great for **quick wins** and dev ergonomics.
+   A lightweight auto‑planner for simple tasks, including “**compare A vs B**”. Useful for fast iteration and low setup overhead.
 
-   **Real world:** “Compare Next.js vs Remix”, “Summarize this doc”.
+   **Examples:** “Compare Next.js vs Remix”, “Summarize this doc”.
 
 3. **LLM planner** *(optional)*
-   Ask a dedicated **planner agent** to emit Plan JSON constrained to the DSL. Use when the user’s request is **open-ended**.
+   Ask a dedicated **planner agent** to emit Plan JSON constrained to the DSL. Use when the request is **open-ended**.
 
-   **Real world:** “Research 3 recent sources on WebGPU and synthesize with citations.”
+   **Examples:** “Research 3 recent sources on WebGPU and synthesize with citations.”
 
 ---
 
@@ -293,7 +354,7 @@ export async function POST(req: Request) {
 }
 ```
 
-**Why this matters:** reproducible weekly summaries that you can test (snapshot plan JSON, mock tools, assert output shape).
+**Why this matters:** reproducible weekly summaries that are testable (snapshot plan JSON, mock tools, assert output shape).
 
 ---
 
@@ -499,9 +560,9 @@ export async function POST(req: Request) {
 
 ---
 
-## Building a tiny DAG UI
+## Building a DAG UI
 
-Render step nodes and edges from the `Plan` to help devs/users see what will run. (Use your existing `DAG` component or keep it simple: nodes from `steps`, edges from `inputFrom` / `children` / `branches` / `itemsFrom`.)
+Render step nodes and edges from the `Plan` to show what will run. Use an existing DAG component or keep it minimal: nodes from `steps`, edges from `inputFrom` / `children` / `branches` / `itemsFrom`.
 
 ---
 
@@ -515,7 +576,7 @@ Render step nodes and edges from the `Plan` to help devs/users see what will run
 
 ---
 
-## Common pitfalls & fixes
+## Common Issues and Fixes
 
 * **“No template 'X'”**
   Make sure you import `@/templates` in routes *and* publish templates to `globalThis.__BOLT_TEMPLATES__` (or use `templatesDir` if your adapter supports it). Restart dev server to clear Turbopack caches.
@@ -531,12 +592,12 @@ Render step nodes and edges from the `Plan` to help devs/users see what will run
 
 ---
 
-## Why this approach wins
+## Why this approach
 
-* **Deterministic core**: your critical workflows are stable and testable (templates).
-* **Flexible edges**: quick wins via heuristic planner; exploratory power with the LLM planner.
-* **Operational excellence**: retries, validation, fan-out, map, branch, and caching—without giving up control.
-* **Great DX & UX**: artifact plans you can diff; real-time events you can stream; easy DAG UIs.
+* **Deterministic core**: critical workflows are stable and testable (templates).
+* **Flexible edges**: rapid heuristics via the heuristic planner; exploratory power with the LLM planner.
+* **Operational excellence**: retries, validation, fan‑out, map, branch, and caching without giving up control.
+* **Developer and user experience**: artifact plans you can diff, real‑time events you can stream, and clear DAG visualizations.
 
 ---
 
@@ -549,4 +610,4 @@ Render step nodes and edges from the `Plan` to help devs/users see what will run
 * [ ] Write tests that snapshot plans and mock tools.
 * [ ] Cache expensive/pure steps; guard structured outputs; cap concurrency.
 
-Go orchestrate real multi-step AI workflows with confidence 🚀
+Operate multi‑step AI workflows with confidence.
