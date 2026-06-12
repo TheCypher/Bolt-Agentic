@@ -142,6 +142,7 @@ export interface Agent {
   id: string;
   description?: string;
   capabilities: Capability[];
+  tools?: string[];
   outputSchema?: any;
   run(ctx: AgentCtx): Promise<any>;
 }

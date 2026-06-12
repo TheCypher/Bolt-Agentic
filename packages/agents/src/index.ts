@@ -3,6 +3,7 @@ export {
   createAgent,
   type AgentDefinition,
   type AgentPrompt,
+  type AgentSkill,
   type AgentMemoryConfig,
   type ReasoningConfig,
   type ReasoningMode,

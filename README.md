@@ -10,61 +10,53 @@
 
 **Overview**
 
-Bolt is a modular toolkit for building agentic systems without locking you into a UI or vendor. It provides routing, planning, tool execution, memory, and governance primitives designed to be composed into your application architecture.
+Bolt is a modular toolkit for building agentic systems without locking you into a UI or vendor. It provides one headless runtime for agents, routing, permissioned tools, memory, planning, and governance primitives designed to be composed into your application architecture.
 
 **Highlights**
 
-1. **Router** — capability‑aware routing with ordered preference and policy‑aware presets (`fast | cheap | strict | auto`).
-2. **Agents** — small, composable units with typed inputs/outputs (`text | json | vision | image | embedding`).
-3. **Planner + Runner** — deterministic plans with retries, guards, branching, and caching.
-4. **Orchestrator** — a plan→run wrapper with pluggable planning modes (`heuristic | llm`).
-5. **Tools** — registry plus built‑ins (`web.search` with domain allow‑list, `http.fetch` allow‑list, `mcp.call`, `vector.search`).
+1. **Runtime** — `createRuntime()` with `run`, `route`, `runParallel`, and structured `RunResult`.
+2. **Router** — capability‑aware routing with ordered preference and policy‑aware presets (`fast | cheap | strict | auto`).
+3. **Markdown Agents + Skills** — Markdown definitions can resolve reusable skills from `skillsDir`.
+4. **Tools** — runtime registry plus per-agent declared tool allow-lists.
+5. **Planner + Runner** — deterministic plans with retries, guards, branching, and caching.
 6. **Memory** — InMemory + Redis adapters (`get/set/patch/history`).
 7. **Observability** — event bus + trace events.
-8. **Governance** — scoped `BOLT.md` instructions, score/budget guards, allow‑listed HTTP, redaction.
+8. **Governance** — scoped `BOLT.md` instructions, JSON Schema/Zod-like validation, budgets, allow-listed HTTP, redaction.
 
 **Core Flow (ASCII)**
 
 ```
-+--------+      prompt       +----------------------+
-| USER   | --------------->  | ROUTER               |
-+--------+                   | - policy/preset      |
-                             | - provider select    |
-                             | - BOLT.md rules      |
-                             +----------+-----------+
-                                        |
-                                        v
-+--------------------------------------------------------------+
-|                         MAIN AGENT                           |
-| - System prompt + tool descriptions + reminders              |
-| - Orchestrates subagents via Task()                          |
-+-----------+-----------+-----------+-----------+--------------+
-            |           |           |           |
-          Task()      Task()      Task()      Task()
-            v           v           v           v
-+-------------+ +-------------+ +-------------+ +-------------+
-| EXPLORE     | | PLAN        | | EXECUTE     | | VALIDATE    |
-| read-only   | | plan DSL    | | tools + run | | scorers     |
-| tools: rg   | | all tools   | | http/web    | | checks      |
-+-------------+ +-------------+ +-------------+ +-------------+
-            \         |           |         /
-             \________|___________|________/
-                      |
-              results (hidden)
-                      v
-+--------------------------------------------------------------+
-|                         MAIN AGENT                           |
-| summarizes + responds to user                                |
-+--------------------------------------------------------------+
-                      |
-                      v
-+--------+
-| USER   |
-+--------+
++--------+      run/route      +----------------------+
+| USER   | ------------------> | BOLT RUNTIME         |
++--------+                     | - agents + memory    |
+                               | - tools + results    |
+                               +----------+-----------+
+                                          |
+                                          v
+                               +----------------------+
+                               | ROUTER               |
+                               | - policy/preset      |
+                               | - provider select    |
+                               | - budget/redaction   |
+                               +----------+-----------+
+                                          |
+                                          v
+                               +----------------------+
+                               | AGENT                |
+                               | - BOLT.md chain      |
+                               | - Markdown skills    |
+                               | - allowed tools only |
+                               +----------+-----------+
+                                          |
+                                          v
+                               +----------------------+
+                               | RUN RESULT           |
+                               | ok/output/error      |
+                               +----------------------+
 ```
 
 **Flow Explanation**
-The router selects a provider and runs the main agent with scoped instructions. The main agent can delegate to specialized subagents (planner, executor, validator) and then summarize results back to the user.
+The runtime owns the public execution surface. The router selects a provider and runs the agent with scoped `BOLT.md` instructions, resolved Markdown skills, traced memory, and only the tools declared by that agent.
 
 ---
 
@@ -107,6 +99,23 @@ Provider selection respects agent capabilities and uses the first matching provi
 ---
 
 **Quick Start (Next.js App Router)**
+
+```ts
+import { createRuntime, InMemoryStore } from '@bolt-ai/core';
+import { createAgentFromMarkdown } from '@bolt-ai/agents';
+
+const support = createAgentFromMarkdown(markdown, { skillsDir: 'skills' });
+const runtime = createRuntime({
+  providers: [provider],
+  memory: new InMemoryStore(),
+  agents: [support],
+  tools: [searchTool],
+});
+
+const result = await runtime.run('support', 'How do refunds work?');
+```
+
+**Next.js App Router**
 
 ```ts
 // app/api/ai/route.ts

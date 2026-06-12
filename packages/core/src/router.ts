@@ -12,6 +12,9 @@ import type {
   ProviderResult,
   Plan,
   Budget,
+  Tool,
+  ToolContext,
+  ToolRegistry,
 } from './types';
 
 export type ProviderPreset = 'fast' | 'cheap' | 'strict' | 'auto';
@@ -258,6 +261,7 @@ export type RouteCostEstimator = (args: {
 export interface RouterOptions {
   providers: ModelProvider[];
   memory: MemoryStore;
+  tools?: ToolRegistry;
   events?: EventBus;
   providerOrder?: string[];
   preset?: ProviderPreset;
@@ -266,6 +270,40 @@ export interface RouterOptions {
   costEstimator?: RouteCostEstimator;
   redaction?: RedactionOptions;
   classify?: (input: unknown, agent?: Agent) => Exclude<ProviderPreset, 'auto'>;
+}
+
+function createScopedToolRegistry(options: {
+  agent: Agent;
+  registry?: ToolRegistry;
+  memory: MemoryStore;
+  signal?: AbortSignal;
+}): ToolRegistry {
+  const allowed = new Set(options.agent.tools ?? []);
+  const isAllowed = (id: string) => allowed.has(id);
+  const wrap = (tool: Tool): Tool => ({
+    ...tool,
+    run: async (args: any, ctx: ToolContext = {}) =>
+      tool.run(args, {
+        ...ctx,
+        allow: options.agent.tools,
+        memory: ctx.memory ?? options.memory,
+        signal: ctx.signal ?? options.signal,
+      }),
+  });
+
+  return {
+    get(id: string) {
+      if (!isAllowed(id)) return undefined;
+      const tool = options.registry?.get(id);
+      return tool ? wrap(tool) : undefined;
+    },
+    list() {
+      return (options.registry?.list() ?? []).filter((tool) => isAllowed(tool.id)).map(wrap);
+    },
+    register(tool: Tool) {
+      options.registry?.register(tool);
+    },
+  };
 }
 
 /** Internal: guards a dynamic global read (Next bundles agents/templates into globals) */
@@ -288,6 +326,7 @@ export class Router implements AppRouter {
   private costEstimator?: RouteCostEstimator;
   private redaction?: RedactionOptions;
   private classify?: (input: unknown, agent?: Agent) => FixedPreset;
+  private tools?: ToolRegistry;
   private breakerState = new Map<string, { failures: number; openUntil?: number }>();
 
   // optional local template registry (apps can also publish via global)
@@ -302,6 +341,7 @@ export class Router implements AppRouter {
     this.costEstimator = opts.costEstimator;
     this.redaction = opts.redaction;
     this.classify = opts.classify;
+    this.tools = opts.tools;
     this.memory = opts.memory;
     this.events = opts.events ?? new EventBus();
   }
@@ -515,12 +555,11 @@ export class Router implements AppRouter {
       },
     };
 
-    // minimal ToolRegistry stub (full registry lives elsewhere; runner can pass ad-hoc tools)
-    const tools = {
-      get: (_id: string) => undefined,
-      list: () => [] as any[],
-      register: (_t: any) => {},
-    };
+    const tools = createScopedToolRegistry({
+      agent,
+      registry: this.tools,
+      memory,
+    });
 
     // run agent with the wrapped call + traced memory
     const ctx: AgentCtx = { input: cleanedInput, call, memory, tools } as any;

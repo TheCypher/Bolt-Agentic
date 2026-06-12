@@ -22,6 +22,15 @@ export interface AgentPrompt {
   suffix?: string;
 }
 
+export interface AgentSkill {
+  id: string;
+  name?: string;
+  description?: string;
+  content: string;
+  filePath?: string;
+  metadata?: Record<string, any>;
+}
+
 export interface AgentDefinition {
   id: string;
   name?: string;
@@ -30,6 +39,8 @@ export interface AgentDefinition {
   model?: string;
   prompt?: AgentPrompt;
   instructions?: string | string[];
+  skills?: string[];
+  resolvedSkills?: AgentSkill[];
   inputSchema?: any;
   outputSchema?: any;
   outputKind?: "text" | "json";
@@ -103,6 +114,82 @@ function extractJson(raw: string): string | null {
   return null;
 }
 
+type JsonSchema = boolean | {
+  type?: string | string[];
+  required?: string[];
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function hasJsonSchemaKeywords(schema: Record<string, unknown>): boolean {
+  return "type" in schema || "required" in schema || "properties" in schema || "items" in schema;
+}
+
+function validateJsonSchemaType(type: string, schema: JsonSchema, value: unknown): boolean {
+  if (type === "string") return typeof value === "string";
+  if (type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (type === "integer") return typeof value === "number" && Number.isInteger(value);
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "null") return value === null;
+
+  if (type === "array") {
+    if (!Array.isArray(value)) return false;
+    const items = isPlainObject(schema) ? schema.items : undefined;
+    if (!items) return true;
+    return value.every((item) => validateJsonSchema(items, item));
+  }
+
+  if (type === "object") {
+    return validateJsonSchemaObject(schema, value);
+  }
+
+  return true;
+}
+
+function validateJsonSchemaObject(schema: JsonSchema, value: unknown): boolean {
+  if (!isPlainObject(schema) || !isPlainObject(value)) return false;
+
+  if (Array.isArray(schema.required)) {
+    for (const key of schema.required) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) return false;
+    }
+  }
+
+  if (isPlainObject(schema.properties)) {
+    for (const [key, propertySchema] of Object.entries(schema.properties)) {
+      if (Object.prototype.hasOwnProperty.call(value, key) && !validateJsonSchema(propertySchema, value[key])) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function validateJsonSchema(schema: JsonSchema, value: unknown): boolean {
+  if (schema === true) return true;
+  if (schema === false) return false;
+  if (!isPlainObject(schema)) return true;
+
+  if (Array.isArray(schema.type)) {
+    return schema.type.some((type) => validateJsonSchemaType(type, schema, value));
+  }
+
+  if (typeof schema.type === "string") {
+    return validateJsonSchemaType(schema.type, schema, value);
+  }
+
+  if (schema.required || schema.properties) {
+    return validateJsonSchemaObject(schema, value);
+  }
+
+  return true;
+}
+
 function validateSchema(schema: any, value: any): boolean {
   if (!schema) return true;
   if (typeof schema.safeParse === "function") return Boolean(schema.safeParse(value)?.success);
@@ -113,6 +200,9 @@ function validateSchema(schema: any, value: any): boolean {
     } catch {
       return false;
     }
+  }
+  if (isPlainObject(schema) && hasJsonSchemaKeywords(schema)) {
+    return validateJsonSchema(schema, value);
   }
   return true;
 }
@@ -131,6 +221,20 @@ function resolveReasoningSteps(reasoning?: ReasoningConfig): number {
 
 function shouldIncludeHistory(template: string): boolean {
   return !template.includes("{{history}}");
+}
+
+function formatSkills(skills?: AgentSkill[]): string {
+  if (!skills?.length) return "";
+  const blocks = skills
+    .map((skill) => {
+      const title = skill.id.trim();
+      const parts = [`## ${title}`];
+      if (skill.description?.trim()) parts.push(`Description: ${skill.description.trim()}`);
+      if (skill.content?.trim()) parts.push(skill.content.trim());
+      return parts.filter(Boolean).join("\n\n");
+    })
+    .filter(Boolean);
+  return blocks.length ? ["Skills:", ...blocks].join("\n\n") : "";
 }
 
 export function createAgent(def: AgentDefinition): Agent {
@@ -167,6 +271,7 @@ export function createAgent(def: AgentDefinition): Agent {
     id: def.id,
     description: def.description ?? def.name,
     capabilities,
+    tools: def.tools,
     outputSchema: def.outputSchema,
     async run(ctx: AgentCtx): Promise<any> {
       if (def.inputSchema && !validateSchema(def.inputSchema, ctx.input)) {
@@ -192,6 +297,8 @@ export function createAgent(def: AgentDefinition): Agent {
       const baseParts: string[] = [];
       const boltDocs = await loadBoltDocs();
       if (boltDocs?.trim()) baseParts.push(boltDocs.trim());
+      const skillsText = formatSkills(def.resolvedSkills);
+      if (skillsText) baseParts.push(skillsText);
       if (systemPrompt) baseParts.push(systemPrompt);
       if (def.prompt?.prefix?.trim()) baseParts.push(def.prompt.prefix.trim());
       if (historyText && shouldIncludeHistory(userTemplate)) {

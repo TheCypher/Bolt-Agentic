@@ -6,6 +6,18 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Bolt-Agentic vNext rebuild handoff for the Markdown-agent runtime direction.
 - Where: `Docs/vNext-rebuild-handoff.md`.
 - Why: Establishes the rebuild north star, architecture constraints, phases, and MVP acceptance criteria for future implementation work.
+- What: `BoltRuntime` facade with structured `RunResult`, `run`, `route`, and `runParallel`.
+- Where: `packages/core/src/runtime.ts`, `packages/core/src/router.ts`, `packages/core/src/types.ts`, `packages/core/src/__tests__/runtime.test.ts`.
+- Why: Provides one headless runtime entry point over provider routing, memory, agents, and tool registration.
+- What: Runtime tool registry wiring with per-agent declared tool allow-lists.
+- Where: `packages/core/src/runtime.ts`, `packages/core/src/router.ts`, `packages/core/src/types.ts`, `packages/core/src/__tests__/runtime.test.ts`.
+- Why: Enforces tool governance while passing runtime memory and cancellation context into allowed tools.
+- What: Markdown skill resolution from `skills` frontmatter and `skillsDir`.
+- Where: `packages/agents/src/markdown.ts`, `packages/agents/src/agentDefinition.ts`, `packages/agents/src/index.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
+- Why: Makes reusable Markdown skills first-class prompt inputs for Markdown-defined agents.
+- What: Agent input/output validation for Zod-like schemas and minimal JSON Schema objects.
+- Where: `packages/agents/src/agentDefinition.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
+- Why: Aligns documented JSON Schema usage with runtime validation behavior.
 - What: BOLT.md scoped instruction chain with auto-override and optional inheritance (`extends: true`).
 - Where: `packages/core/src/boltDocs.ts`, `packages/agents/src/agentDefinition.ts`, `packages/agents/src/markdown.ts`, `packages/core/src/__tests__/boltDocs.test.ts`, `packages/agents/src/__tests__/boltDocsAgent.test.ts`.
 - Why: Enables Codex-style instruction layering so multiple agents can carry directory-specific guidance.

@@ -1,10 +1,19 @@
+import fs from "node:fs";
+import path from "node:path";
 import matter from "gray-matter";
 import type { Capability } from "@bolt-ai/core";
-import { createAgent, type AgentDefinition, type AgentPrompt, type ReasoningConfig } from "./agentDefinition";
+import {
+  createAgent,
+  type AgentDefinition,
+  type AgentPrompt,
+  type AgentSkill,
+  type ReasoningConfig,
+} from "./agentDefinition";
 
 export type MarkdownParseOptions = {
   defaultId?: string;
   filePath?: string;
+  skillsDir?: string;
 };
 
 function normalizeArray(value: unknown): string[] | undefined {
@@ -89,6 +98,80 @@ function inferIdFromPath(filePath?: string, fallback?: string): string | undefin
   return cleaned || fallback;
 }
 
+function isMarkdownFile(filePath: string): boolean {
+  return /\.(md|mdx)$/i.test(filePath);
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return Boolean(relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function findSkillFile(skillsDir: string, skillId: string): string | undefined {
+  const root = path.resolve(skillsDir);
+  const ref = skillId.trim();
+  if (!ref || path.isAbsolute(ref)) return undefined;
+
+  const hasMarkdownExtension = isMarkdownFile(ref);
+  const candidates = hasMarkdownExtension
+    ? [path.resolve(root, ref)]
+    : [
+        path.resolve(root, `${ref}.md`),
+        path.resolve(root, `${ref}.mdx`),
+        path.resolve(root, ref, "SKILL.md"),
+        path.resolve(root, ref, "SKILL.mdx"),
+        path.resolve(root, ref, "skill.md"),
+        path.resolve(root, ref, "skill.mdx"),
+      ];
+
+  for (const candidate of candidates) {
+    if (!isWithinRoot(root, candidate)) continue;
+    try {
+      const stat = fs.statSync(candidate);
+      if (stat.isFile()) return candidate;
+    } catch {
+      // Try the next supported skill file shape.
+    }
+  }
+  return undefined;
+}
+
+function metadataWithoutSkillFields(data: Record<string, any>): Record<string, any> | undefined {
+  const metadata = { ...data };
+  delete metadata.id;
+  delete metadata.name;
+  delete metadata.title;
+  delete metadata.description;
+  delete metadata.summary;
+  return Object.keys(metadata).length ? metadata : undefined;
+}
+
+function loadMarkdownSkill(skillId: string, skillsDir: string): AgentSkill | undefined {
+  const filePath = findSkillFile(skillsDir, skillId);
+  if (!filePath) return undefined;
+  const parsed = matter(fs.readFileSync(filePath, "utf8"));
+  const data = (parsed.data ?? {}) as Record<string, any>;
+  const id = String(data.id ?? skillId).trim();
+  const content = (parsed.content ?? "").trim();
+  if (!id || !content) return undefined;
+  return {
+    id,
+    name: data.name ?? data.title,
+    description: data.description ?? data.summary,
+    content,
+    filePath,
+    metadata: metadataWithoutSkillFields(data),
+  };
+}
+
+function resolveMarkdownSkills(skillIds: string[] | undefined, skillsDir: string | undefined): AgentSkill[] | undefined {
+  if (!skillIds?.length || !skillsDir) return undefined;
+  const skills = skillIds
+    .map((skillId) => loadMarkdownSkill(skillId, skillsDir))
+    .filter((skill): skill is AgentSkill => Boolean(skill));
+  return skills.length ? skills : undefined;
+}
+
 export function parseAgentMarkdown(markdown: string, options: MarkdownParseOptions = {}): AgentDefinition {
   const parsed = matter(markdown ?? "");
   const data = (parsed.data ?? {}) as Record<string, any>;
@@ -116,6 +199,7 @@ export function parseAgentMarkdown(markdown: string, options: MarkdownParseOptio
   const toolsFromSection = sections.tools ? sections.tools.split(/\r?\n/).map((line) => line.replace(/^[-*]\s+/, "").trim()).filter(Boolean) : undefined;
 
   const memoryMeta = meta.memory ?? {};
+  const skills = normalizeArray(meta.skills ?? meta.skill);
 
   const boltDocsMeta = meta.boltDocs ?? meta.bolt;
   const boltDocs =
@@ -142,6 +226,8 @@ export function parseAgentMarkdown(markdown: string, options: MarkdownParseOptio
     outputSchema: parseMaybeJson(meta.outputSchema ?? meta.output?.schema),
     outputKind: meta.outputKind ?? meta.output?.kind,
     tools: normalizeArray(meta.tools) ?? toolsFromSection,
+    skills,
+    resolvedSkills: resolveMarkdownSkills(skills, options.skillsDir),
     memory: {
       scope: memoryMeta.scope ?? meta.memoryScope,
       history: memoryMeta.history ?? memoryMeta.limit ?? meta.history,

@@ -10,56 +10,46 @@
 
 **What this package provides**
 
-1. **Router** — capability‑aware routing with ordered preference and policy‑aware presets (`fast | cheap | strict | auto`).
-2. **Planner + Runner** — deterministic plans with retries, guards, branching, and caching.
-3. **Orchestrator** — a plan→run wrapper with pluggable planning modes.
-4. **Memory interfaces** — default in‑memory store + Redis adapter compatibility.
-5. **Tool registry + types** — standardized tool interfaces and registry helpers.
+1. **Runtime** — `createRuntime()` with `run`, `route`, `runParallel`, and structured `RunResult`.
+2. **Router** — capability-aware routing with ordered preference and policy-aware presets (`fast | cheap | strict | auto`).
+3. **Permissioned tools** — runtime registry with per-agent declared tool allow-lists.
+4. **Planner + Runner** — deterministic plans with retries, guards, branching, and caching.
+5. **Memory interfaces** — default in-memory store + Redis adapter compatibility.
 6. **Observability** — event bus + trace events.
-7. **Governance** — scoped `BOLT.md` instructions, score/budget guards, allow‑listed HTTP, redaction.
+7. **Governance** — scoped `BOLT.md` instructions, score/budget guards, allow-listed HTTP, redaction.
 
 **Core Flow (ASCII)**
 
 ```
-+--------+      prompt       +----------------------+
-| USER   | --------------->  | ROUTER               |
-+--------+                   | - policy/preset      |
-                             | - provider select    |
-                             | - BOLT.md rules      |
-                             +----------+-----------+
-                                        |
-                                        v
-+--------------------------------------------------------------+
-|                         MAIN AGENT                           |
-| - System prompt + tool descriptions + reminders              |
-| - Orchestrates subagents via Task()                          |
-+-----------+-----------+-----------+-----------+--------------+
-            |           |           |           |
-          Task()      Task()      Task()      Task()
-            v           v           v           v
-+-------------+ +-------------+ +-------------+ +-------------+
-| EXPLORE     | | PLAN        | | EXECUTE     | | VALIDATE    |
-| read-only   | | plan DSL    | | tools + run | | scorers     |
-| tools: rg   | | all tools   | | http/web    | | checks      |
-+-------------+ +-------------+ +-------------+ +-------------+
-            \         |           |         /
-             \________|___________|________/
-                      |
-              results (hidden)
-                      v
-+--------------------------------------------------------------+
-|                         MAIN AGENT                           |
-| summarizes + responds to user                                |
-+--------------------------------------------------------------+
-                      |
-                      v
-+--------+
-| USER   |
-+--------+
++--------+      run/route      +----------------------+
+| USER   | ------------------> | BOLT RUNTIME         |
++--------+                     | - agents + memory    |
+                               | - tools + results    |
+                               +----------+-----------+
+                                          |
+                                          v
+                               +----------------------+
+                               | ROUTER               |
+                               | - provider select    |
+                               | - budget/redaction   |
+                               +----------+-----------+
+                                          |
+                                          v
+                               +----------------------+
+                               | AGENT                |
+                               | - scoped memory      |
+                               | - allowed tools only |
+                               +----------+-----------+
+                                          |
+                                          v
+                               +----------------------+
+                               | RUN RESULT           |
+                               | ok/output/error      |
+                               +----------------------+
 ```
 
 **Flow Explanation**
-The router selects a provider and runs the main agent with scoped instructions. The main agent can delegate to specialized subagents (planner, executor, validator) and then summarize results back to the user.
+The runtime is the public execution surface. It registers agents and tools, delegates provider selection to the router, passes traced memory into agent execution, and exposes only the tools declared by the running agent.
 
 ---
 
@@ -74,21 +64,18 @@ pnpm add @bolt-ai/core
 **Usage**
 
 ```ts
-import { createAppRouter } from '@bolt-ai/core';
-import { InMemoryStore } from '@bolt-ai/core';
+import { createRuntime, InMemoryStore } from '@bolt-ai/core';
 import { createGroqProvider } from '@bolt-ai/providers-groq';
 
-const router = createAppRouter({
+const runtime = createRuntime({
   providers: [createGroqProvider()],
   memory: new InMemoryStore(),
   preset: 'auto',
+  agents: [supportAgent],
+  tools: [searchTool],
 });
 
-const result = await router.route({
-  id: 'req-1',
-  agentId: 'support',
-  input: { text: 'hello' },
-});
+const result = await runtime.run('support', { text: 'hello' });
 ```
 
 ---
