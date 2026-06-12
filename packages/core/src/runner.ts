@@ -62,6 +62,18 @@ export async function runPlan(
 ): Promise<{ outputs: Record<string, any> }> {
   const out = new Map<string, any>();
   const stepById = new Map(plan.steps.map((s) => [s.id, s]));
+  const nestedStepIds = new Set<string>();
+  for (const s of plan.steps) {
+    if (s.kind === "parallel") {
+      for (const childId of s.children) nestedStepIds.add(childId);
+    }
+    if (s.kind === "branch") {
+      for (const branch of s.branches) {
+        for (const stepId of branch.then) nestedStepIds.add(stepId);
+      }
+      for (const stepId of s.else ?? []) nestedStepIds.add(stepId);
+    }
+  }
   const onEvent = opts.onEvent ?? (() => {});
   const maxConc = Math.max(1, opts.maxConcurrency ?? 3);
   const defaultTTL = Math.max(0, opts.defaultStepTTLSeconds ?? 300);
@@ -271,6 +283,8 @@ export async function runPlan(
   onEvent({ type: "plan", plan } as RunnerEvent);
 
   for (const s of plan.steps) {
+    if (nestedStepIds.has(s.id)) continue;
+
     // Parallel: run listed children concurrently
     if (s.kind === "parallel") {
       const proms = s.children.map((cid) => {

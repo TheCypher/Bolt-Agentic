@@ -9,6 +9,20 @@ const makeRouter = (response: any, delayMs = 0) => ({
   },
 });
 
+const makeCountingRouter = () => {
+  const calls: string[] = [];
+
+  return {
+    calls,
+    router: {
+      route: async ({ agentId }: { agentId: string }) => {
+        calls.push(agentId);
+        return `${agentId}-result`;
+      },
+    },
+  };
+};
+
 describe("runPlan guard score checks", () => {
   it("fails when score check is below minimum", async () => {
     const plan: Plan = {
@@ -29,6 +43,67 @@ describe("runPlan guard score checks", () => {
         scorers: { consistency: () => 0.5 },
       })
     ).rejects.toThrow(/score check/i);
+  });
+});
+
+describe("runPlan nested step ownership", () => {
+  it("does not execute parallel children again when they also appear later in plan.steps", async () => {
+    const { calls, router } = makeCountingRouter();
+    const plan: Plan = {
+      id: "parallel-children",
+      steps: [
+        { id: "fanout", kind: "parallel", children: ["left", "right"] },
+        { id: "left", kind: "model", agent: "left-agent" },
+        { id: "right", kind: "model", agent: "right-agent" },
+      ],
+      outputs: ["left", "right"],
+    };
+
+    const result = await runPlan(router as any, plan, { taskId: "t4", agentId: "a", input: "hi" });
+
+    expect(calls.sort()).toEqual(["left-agent", "right-agent"]);
+    expect(result.outputs).toEqual({
+      left: "left-agent-result",
+      right: "right-agent-result",
+    });
+  });
+
+  it("does not execute selected branch children again when they also appear later in plan.steps", async () => {
+    const { calls, router } = makeCountingRouter();
+    const plan: Plan = {
+      id: "branch-children",
+      steps: [
+        { id: "decide", kind: "tool", toolId: "decide" },
+        {
+          id: "branch",
+          kind: "branch",
+          branches: [{ when: { truthy: "decide.runModel" }, then: ["chosen"] }],
+          else: ["fallback"],
+        },
+        { id: "chosen", kind: "model", agent: "chosen-agent" },
+        { id: "fallback", kind: "model", agent: "fallback-agent" },
+      ],
+      outputs: ["chosen", "fallback"],
+    };
+
+    const result = await runPlan(
+      router as any,
+      plan,
+      {
+        taskId: "t5",
+        agentId: "a",
+        input: "hi",
+        tools: {
+          decide: async () => ({ runModel: true }),
+        },
+      }
+    );
+
+    expect(calls).toEqual(["chosen-agent"]);
+    expect(result.outputs).toEqual({
+      chosen: "chosen-agent-result",
+      fallback: undefined,
+    });
   });
 });
 

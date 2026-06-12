@@ -36,6 +36,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Runner budgets + score checks (`scorers`, `costEstimator`).
 - Where: `packages/core/src/types.ts`, `packages/core/src/runner.ts`, `packages/core/src/__tests__/runner.test.ts`.
 - Why: Enforces reliability guardrails and cost/latency limits during orchestration.
+- What: Runner nested step ownership for `parallel` and `branch` children.
+- Where: `packages/core/src/runner.ts`, `packages/core/src/__tests__/runner.test.ts`.
+- Why: Prevents child steps declared in a plan from executing again as top-level steps after a parent runs them.
 - What: HTTP tool allow-list support via `createHttpTool`.
 - Where: `packages/tools/src/http.ts`, `packages/tools/src/__tests__/http.test.ts`.
 - Why: Adds governance controls over outbound HTTP access.
