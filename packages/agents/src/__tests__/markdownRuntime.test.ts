@@ -161,4 +161,38 @@ Ready: {{input}}
 
     await expect(runtime.ready()).rejects.toThrow("ready requires MarkdownRuntimeOptions.agentsDir");
   });
+
+  it("explains Markdown runtime loader directories and readiness", async () => {
+    const root = await makeTempDir("bolt-ready-explain-");
+    const skillsDir = path.join(root, "skills");
+    await writeFile(path.join(root, "agents", "support.md"), "---\nid: support\n---\nSupport");
+
+    const runtime = createMarkdownRuntime({
+      providers: [provider()],
+      memory: new InMemoryStore(),
+      agentsDir: path.join(root, "agents"),
+      skillsDir,
+    });
+
+    await expect(runtime.explain({ agentId: "support" })).resolves.toMatchObject({
+      ok: false,
+      markdown: {
+        agentsDir: path.join(root, "agents"),
+        skillsDir,
+        ready: false,
+      },
+    });
+
+    await runtime.ready();
+
+    await expect(runtime.explain({ agentId: "support" })).resolves.toMatchObject({
+      ok: true,
+      agents: ["support"],
+      markdown: {
+        agentsDir: path.join(root, "agents"),
+        skillsDir,
+        ready: true,
+      },
+    });
+  });
 });

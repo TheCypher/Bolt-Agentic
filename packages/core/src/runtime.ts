@@ -15,6 +15,24 @@ export interface RuntimeRunRequest extends RuntimeRunOptions {
   input: unknown;
 }
 
+export interface RuntimeExplainRequest {
+  agentId: string;
+  input?: unknown;
+  memoryScope?: string;
+}
+
+export interface RuntimeExplainResult {
+  ok: boolean;
+  reason: string;
+  agentId: string;
+  agents: string[];
+  provider: string;
+  providers: string[];
+  memory: string;
+  tools: string[];
+  env: { GROQ_API_KEY: boolean; REDIS_URL: boolean };
+}
+
 export interface RuntimeError {
   code: string;
   message: string;
@@ -44,6 +62,7 @@ export interface BoltRuntime {
   listAgents(): string[];
   listProviders(): string[];
   listTools(): string[];
+  explain(request: RuntimeExplainRequest): Promise<RuntimeExplainResult>;
   run<T = unknown>(agentId: string, input: unknown, options?: RuntimeRunOptions): Promise<RunResult<T>>;
   route<T = unknown>(request: RuntimeRunRequest): Promise<RunResult<T>>;
   runParallel<T = unknown>(requests: RuntimeRunRequest[]): Promise<Array<RunResult<T>>>;
@@ -117,6 +136,14 @@ export class DefaultBoltRuntime implements BoltRuntime {
 
   listTools(): string[] {
     return this.tools.list().map((tool) => tool.id);
+  }
+
+  async explain(request: RuntimeExplainRequest): Promise<RuntimeExplainResult> {
+    const explanation = await this.router.explain(request);
+    return {
+      ...explanation,
+      tools: this.listTools(),
+    };
   }
 
   async run<T = unknown>(

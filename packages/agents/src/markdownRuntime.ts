@@ -4,6 +4,8 @@ import {
   createRuntime,
   type Agent,
   type BoltRuntime,
+  type RuntimeExplainRequest,
+  type RuntimeExplainResult,
   type RuntimeOptions,
 } from "@bolt-ai/core";
 import { createAgentFromMarkdown, type MarkdownParseOptions } from "./markdown";
@@ -21,6 +23,13 @@ export interface MarkdownRuntime extends BoltRuntime {
   ready(): Promise<Agent[]>;
   loadAgent(filePath: string, options?: MarkdownRuntimeLoadOptions): Promise<Agent>;
   loadAgents(dir?: string, options?: MarkdownRuntimeLoadOptions): Promise<Agent[]>;
+  explain(request: RuntimeExplainRequest): Promise<RuntimeExplainResult & {
+    markdown: {
+      agentsDir?: string;
+      skillsDir?: string;
+      ready: boolean;
+    };
+  }>;
 }
 
 function isMarkdownAgentCandidate(filePath: string): boolean {
@@ -50,6 +59,7 @@ async function collectMarkdownAgentFiles(dir: string): Promise<string[]> {
 
 export function createMarkdownRuntime(options: MarkdownRuntimeOptions): MarkdownRuntime {
   const runtime = createRuntime(options) as MarkdownRuntime;
+  const explainRuntime = runtime.explain.bind(runtime);
   let readyPromise: Promise<Agent[]> | undefined;
 
   runtime.loadAgent = async (filePath: string, loadOptions: MarkdownRuntimeLoadOptions = {}) => {
@@ -79,6 +89,18 @@ export function createMarkdownRuntime(options: MarkdownRuntimeOptions): Markdown
     }
     readyPromise ??= runtime.loadAgents(options.agentsDir);
     return readyPromise;
+  };
+
+  runtime.explain = async (request: RuntimeExplainRequest) => {
+    const explanation = await explainRuntime(request);
+    return {
+      ...explanation,
+      markdown: {
+        agentsDir: options.agentsDir,
+        skillsDir: options.skillsDir,
+        ready: Boolean(readyPromise),
+      },
+    };
   };
 
   return runtime;

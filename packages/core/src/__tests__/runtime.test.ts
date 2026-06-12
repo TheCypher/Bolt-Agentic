@@ -162,4 +162,24 @@ describe("BoltRuntime", () => {
       },
     });
   });
+
+  it("explains runtime routing, providers, memory, and registered tools", async () => {
+    const runtime = createRuntime({
+      providers: [provider()],
+      memory: new InMemoryStore(),
+      agents: [echoAgent()],
+      tools: [{ id: "search", async run() { return "ok"; } }],
+    });
+
+    await expect(runtime.explain({ agentId: "echo", input: "hi" })).resolves.toMatchObject({
+      ok: true,
+      reason: "ready",
+      agentId: "echo",
+      agents: ["echo"],
+      providers: ["test"],
+      provider: "test",
+      memory: "InMemoryStore",
+      tools: ["search"],
+    });
+  });
 });

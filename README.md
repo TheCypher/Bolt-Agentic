@@ -114,6 +114,7 @@ const runtime = createMarkdownRuntime({
 
 await runtime.ready();
 const result = await runtime.run('support', 'How do refunds work?');
+const diagnostics = await runtime.explain({ agentId: 'support' });
 ```
 
 **Next.js App Router**
