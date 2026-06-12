@@ -15,6 +15,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Provider-native tool-call loop with allowed tool execution, tool result feedback, and iteration guard.
 - Where: `packages/core/src/types.ts`, `packages/core/src/router.ts`, `packages/core/src/__tests__/runtime.test.ts`.
 - Why: Lets model providers request runtime tools directly while preserving per-agent tool governance.
+- What: OpenAI-compatible provider tool mapping for Groq adapters.
+- Where: `packages/core/src/types.ts`, `packages/core/src/router.ts`, `packages/providers/groq/src/index.ts`, `packages/providers/groq/src/__tests__/groqProvider.test.ts`.
+- Why: Converts Bolt tool definitions, provider tool calls, and tool results into the common chat-completions tool shape.
 - What: Markdown skill resolution from `skills` frontmatter and `skillsDir`.
 - Where: `packages/agents/src/markdown.ts`, `packages/agents/src/agentDefinition.ts`, `packages/agents/src/index.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Makes reusable Markdown skills first-class prompt inputs for Markdown-defined agents.

@@ -15,6 +15,7 @@ export interface ProviderCallArgs {
   prompt?: string;
   schema?: any;        // zod or JSON schema
   input?: unknown;     // when not prompt-driven
+  tools?: ProviderToolDefinition[];
   toolResults?: ProviderToolResult[];
   stream?: boolean;
   /** Called with incremental text tokens (if provider supports streaming) */
@@ -26,6 +27,12 @@ export interface ProviderToolCall {
   id?: string;
   toolId: string;
   args?: unknown;
+}
+
+export interface ProviderToolDefinition {
+  id: string;
+  description?: string;
+  schema?: any;
 }
 
 export interface ProviderToolResult<T = any> {

@@ -518,6 +518,10 @@ export class Router implements AppRouter {
         // wire token streaming into event bus (if provider supports it)
         res = await provider.call({
           ...safeArgs,
+          tools: safeArgs.tools ?? tools.list().map((tool) => ({
+            id: tool.id,
+            schema: tool.schema,
+          })),
           onToken: (delta: string) => {
             this.events.emit({ type: 'provider:call:token', id, delta });
             onToken?.(delta);

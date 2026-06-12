@@ -224,6 +224,52 @@ describe("BoltRuntime", () => {
     );
   });
 
+  it("passes allowed tool definitions into provider calls", async () => {
+    let seenTools: unknown;
+    const model = {
+      id: "tool-defs",
+      supports: ["text"],
+      call: vi.fn(async (args) => {
+        seenTools = args.tools;
+        return { output: "ok" };
+      }),
+    } as unknown as ModelProvider;
+    const runtime = createRuntime({
+      providers: [model],
+      memory: new InMemoryStore(),
+      agents: [{ ...echoAgent("tool-def-agent"), tools: ["allowed.echo"] }],
+      tools: [
+        {
+          id: "allowed.echo",
+          schema: {
+            type: "object",
+            required: ["value"],
+            properties: { value: { type: "string" } },
+          },
+          async run() { return "ok"; },
+        },
+        {
+          id: "blocked.echo",
+          schema: { type: "object" },
+          async run() { return "blocked"; },
+        },
+      ],
+    });
+
+    await runtime.run("tool-def-agent", "hi");
+
+    expect(seenTools).toEqual([
+      {
+        id: "allowed.echo",
+        schema: {
+          type: "object",
+          required: ["value"],
+          properties: { value: { type: "string" } },
+        },
+      },
+    ]);
+  });
+
   it("forwards provider tokens through runtime run options", async () => {
     const deltas: string[] = [];
     const model = {
