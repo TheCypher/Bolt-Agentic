@@ -21,6 +21,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Runtime diagnostics via `runtime.explain()` with provider, memory, tool, and Markdown loader state.
 - Where: `packages/core/src/runtime.ts`, `packages/agents/src/markdownRuntime.ts`, `packages/core/src/__tests__/runtime.test.ts`, `packages/agents/src/__tests__/markdownRuntime.test.ts`.
 - Why: Helps users debug loaded agents, provider choice, registered tools, and Markdown runtime readiness without making model calls.
+- What: Runnable Markdown runtime example with agents, skills, local tool, and deterministic mock provider.
+- Where: `examples/markdown-runtime/README.md`, `examples/markdown-runtime/run.mjs`, `examples/markdown-runtime/agents/support.md`, `examples/markdown-runtime/skills/concise.md`, `examples/markdown-runtime/tools/localKnowledge.mjs`, `examples/markdown-runtime/run.test.mjs`.
+- Why: Demonstrates the runtime-first Markdown agent workflow without network calls or API keys.
 - What: Agent input/output validation for Zod-like schemas and minimal JSON Schema objects.
 - Where: `packages/agents/src/agentDefinition.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Aligns documented JSON Schema usage with runtime validation behavior.
