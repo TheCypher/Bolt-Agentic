@@ -117,6 +117,12 @@ const result = await runtime.run('support', 'How do refunds work?');
 const diagnostics = await runtime.explain({ agentId: 'support' });
 ```
 
+**CLI**
+
+```bash
+bolt run support --agents-dir agents --skills-dir skills --input '{"question":"How do refunds work?"}'
+```
+
 **Next.js App Router**
 
 ```ts

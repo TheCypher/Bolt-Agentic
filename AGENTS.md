@@ -33,6 +33,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Runnable Markdown runtime example with agents, skills, local tool, and deterministic mock provider.
 - Where: `examples/markdown-runtime/README.md`, `examples/markdown-runtime/run.mjs`, `examples/markdown-runtime/agents/support.md`, `examples/markdown-runtime/skills/concise.md`, `examples/markdown-runtime/tools/localKnowledge.mjs`, `examples/markdown-runtime/run.test.mjs`.
 - Why: Demonstrates the runtime-first Markdown agent workflow without network calls or API keys.
+- What: CLI runner for Markdown agents via `bolt run`.
+- Where: `packages/cli/package.json`, `packages/cli/src/index.ts`, `packages/cli/src/__tests__/cli.test.ts`, `packages/cli/tsconfig.json`.
+- Why: Lets users run Markdown agents from `agentsDir` locally with Groq or deterministic mock providers.
 - What: Agent input/output validation for Zod-like schemas and minimal JSON Schema objects.
 - Where: `packages/agents/src/agentDefinition.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Aligns documented JSON Schema usage with runtime validation behavior.
