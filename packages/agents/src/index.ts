@@ -9,3 +9,9 @@ export {
   type ReasoningMode,
 } from "./agentDefinition";
 export { parseAgentMarkdown, createAgentFromMarkdown, type MarkdownParseOptions } from "./markdown";
+export {
+  createMarkdownRuntime,
+  type MarkdownRuntime,
+  type MarkdownRuntimeLoadOptions,
+  type MarkdownRuntimeOptions,
+} from "./markdownRuntime";

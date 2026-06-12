@@ -15,6 +15,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Markdown skill resolution from `skills` frontmatter and `skillsDir`.
 - Where: `packages/agents/src/markdown.ts`, `packages/agents/src/agentDefinition.ts`, `packages/agents/src/index.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Makes reusable Markdown skills first-class prompt inputs for Markdown-defined agents.
+- What: Markdown runtime loader via `createMarkdownRuntime().loadAgent()` and `.loadAgents()`.
+- Where: `packages/agents/src/markdownRuntime.ts`, `packages/agents/src/index.ts`, `packages/agents/src/__tests__/markdownRuntime.test.ts`.
+- Why: Lets apps run Markdown-defined agents without manually parsing and registering each agent.
 - What: Agent input/output validation for Zod-like schemas and minimal JSON Schema objects.
 - Where: `packages/agents/src/agentDefinition.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Aligns documented JSON Schema usage with runtime validation behavior.

@@ -101,17 +101,18 @@ Provider selection respects agent capabilities and uses the first matching provi
 **Quick Start (Next.js App Router)**
 
 ```ts
-import { createRuntime, InMemoryStore } from '@bolt-ai/core';
-import { createAgentFromMarkdown } from '@bolt-ai/agents';
+import { InMemoryStore } from '@bolt-ai/core';
+import { createMarkdownRuntime } from '@bolt-ai/agents';
 
-const support = createAgentFromMarkdown(markdown, { skillsDir: 'skills' });
-const runtime = createRuntime({
+const runtime = createMarkdownRuntime({
   providers: [provider],
   memory: new InMemoryStore(),
-  agents: [support],
+  agentsDir: 'agents',
+  skillsDir: 'skills',
   tools: [searchTool],
 });
 
+await runtime.loadAgent('agents/support.md');
 const result = await runtime.run('support', 'How do refunds work?');
 ```
 
