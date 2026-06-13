@@ -60,9 +60,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Web search tool domain filtering via `createWebSearchTool`.
 - Where: `packages/tools/src/webSearch.ts`, `packages/tools/src/__tests__/webSearch.test.ts`.
 - Why: Restricts search results to trusted domains.
-- What: MCP tool adapter via `createMcpTool`.
-- Where: `packages/tools/src/mcp.ts`, `packages/tools/src/__tests__/mcp.test.ts`.
-- Why: Bridges Bolt tools to MCP servers.
+- What: MCP compatibility helpers for importing MCP tools and exposing Bolt tools/agents as callable MCP capabilities.
+- Where: `packages/core/src/types.ts`, `packages/tools/src/mcp.ts`, `packages/tools/src/__tests__/mcp.test.ts`.
+- Why: Bridges Bolt tools and agents with MCP client/server tool shapes without requiring network subprocesses.
 - What: Vector search tool adapter via `createVectorTool`.
 - Where: `packages/tools/src/vector.ts`, `packages/tools/src/__tests__/vector.test.ts`.
 - Why: Enables vector retrieval steps inside plans.
