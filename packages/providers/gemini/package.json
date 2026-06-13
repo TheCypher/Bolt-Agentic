@@ -1,0 +1,55 @@
+{
+  "name": "@bolt-ai/providers-gemini",
+  "version": "1.0.0",
+  "description": "Gemini model provider adapter for Bolt AI agents.",
+  "license": "MIT",
+  "author": "Bolt AI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheCypher/Bolt-Agentic.git"
+  },
+  "homepage": "https://github.com/TheCypher/Bolt-Agentic#readme",
+  "bugs": {
+    "url": "https://github.com/TheCypher/Bolt-Agentic/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "gemini",
+    "providers",
+    "bolt"
+  ],
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=20.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@bolt-ai/core": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@bolt-ai/core": { "optional": false }
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0"
+  },
+  "devDependencies": {
+    "@bolt-ai/core": "workspace:*",
+    "tsup": "^8.5.0",
+    "typescript": "^5.5.0",
+    "rimraf": "^6.0.1"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
+    "clean": "rimraf dist"
+  }
+}
