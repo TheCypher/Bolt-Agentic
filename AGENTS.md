@@ -18,6 +18,12 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: OpenAI-compatible provider tool mapping for Groq adapters.
 - Where: `packages/core/src/types.ts`, `packages/core/src/router.ts`, `packages/providers/groq/src/index.ts`, `packages/providers/groq/src/__tests__/groqProvider.test.ts`.
 - Why: Converts Bolt tool definitions, provider tool calls, and tool results into the common chat-completions tool shape.
+- What: Native OpenAI and Gemini provider adapters with streaming, JSON, and tool calling.
+- Where: `packages/providers/openai`, `packages/providers/gemini`, provider tests, `pnpm-lock.yaml`.
+- Why: Completes the 1.0 native provider surface alongside Groq.
+- What: Native provider discovery in CLI and Next.js integrations.
+- Where: `packages/cli/src/index.ts`, `packages/cli/src/__tests__/cli.test.ts`, `packages/next/src/router.ts`, `packages/next/src/__tests__/providerAutodetect.test.ts`.
+- Why: Makes OpenAI, Gemini, and Groq available through the primary application adapters without manual provider wiring.
 - What: Markdown skill resolution from `skills` frontmatter and `skillsDir`.
 - Where: `packages/agents/src/markdown.ts`, `packages/agents/src/agentDefinition.ts`, `packages/agents/src/index.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Makes reusable Markdown skills first-class prompt inputs for Markdown-defined agents.
@@ -35,7 +41,7 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - Why: Demonstrates the runtime-first Markdown agent workflow without network calls or API keys.
 - What: CLI runner for Markdown agents via `bolt run`.
 - Where: `packages/cli/package.json`, `packages/cli/src/index.ts`, `packages/cli/src/__tests__/cli.test.ts`, `packages/cli/tsconfig.json`.
-- Why: Lets users run Markdown agents from `agentsDir` locally with Groq or deterministic mock providers.
+- Why: Lets users run Markdown agents from `agentsDir` locally with OpenAI, Gemini, Groq, or deterministic mock providers.
 - What: Agent input/output validation for Zod-like schemas and minimal JSON Schema objects.
 - Where: `packages/agents/src/agentDefinition.ts`, `packages/agents/src/__tests__/agentMarkdown.test.ts`.
 - Why: Aligns documented JSON Schema usage with runtime validation behavior.
@@ -60,9 +66,9 @@ Purpose: source of truth for feature scope and technical location. Update this f
 - What: Web search tool domain filtering via `createWebSearchTool`.
 - Where: `packages/tools/src/webSearch.ts`, `packages/tools/src/__tests__/webSearch.test.ts`.
 - Why: Restricts search results to trusted domains.
-- What: MCP tool adapter via `createMcpTool`.
-- Where: `packages/tools/src/mcp.ts`, `packages/tools/src/__tests__/mcp.test.ts`.
-- Why: Bridges Bolt tools to MCP servers.
+- What: MCP compatibility helpers for importing MCP tools and exposing Bolt tools/agents as callable MCP capabilities.
+- Where: `packages/core/src/types.ts`, `packages/tools/src/mcp.ts`, `packages/tools/src/__tests__/mcp.test.ts`.
+- Why: Bridges Bolt tools and agents with MCP client/server tool shapes while leaving stdio/HTTP transport ownership to the selected MCP SDK or host.
 - What: Vector search tool adapter via `createVectorTool`.
 - Where: `packages/tools/src/vector.ts`, `packages/tools/src/__tests__/vector.test.ts`.
 - Why: Enables vector retrieval steps inside plans.

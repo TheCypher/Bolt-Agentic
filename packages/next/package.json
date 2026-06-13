@@ -28,7 +28,7 @@
   },
   "files": ["dist"],
   "engines": {
-    "node": ">=18.17"
+    "node": ">=20.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -38,12 +38,16 @@
     "@bolt-ai/core": ">=1.0.0",
     "@bolt-ai/agents": ">=1.0.0",
     "@bolt-ai/memory-redis": ">=1.0.0",
+    "@bolt-ai/providers-gemini": ">=1.0.0",
+    "@bolt-ai/providers-openai": ">=1.0.0",
     "@bolt-ai/providers-groq": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@bolt-ai/core": { "optional": false },
     "@bolt-ai/agents": { "optional": false },
     "@bolt-ai/memory-redis": { "optional": true },
+    "@bolt-ai/providers-gemini": { "optional": true },
+    "@bolt-ai/providers-openai": { "optional": true },
     "@bolt-ai/providers-groq": { "optional": true }
   },
   "dependencies": {
@@ -53,6 +57,8 @@
     "@bolt-ai/core": "workspace:*",
     "@bolt-ai/agents": "workspace:*",
     "@bolt-ai/memory-redis": "workspace:*",
+    "@bolt-ai/providers-gemini": "workspace:*",
+    "@bolt-ai/providers-openai": "workspace:*",
     "@bolt-ai/providers-groq": "workspace:*",
     "next": "^14.2.0",
     "tsup": "^8.5.0",

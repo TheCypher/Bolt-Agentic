@@ -11,7 +11,8 @@ Bolt loads agents from Markdown or TypeScript, resolves reusable Markdown skills
 - **Runtime first:** one `BoltRuntime` owns agents, tools, providers, memory, routing, diagnostics, and parallel runs.
 - **Markdown agents:** define behavior, skills, tool allow-lists, schemas, memory, and prompts in `.md` files.
 - **Tools are governed:** tools are registered in code and exposed only to agents that declare them.
-- **Provider agnostic:** model providers implement one small interface; Groq ships today.
+- **Native providers:** OpenAI, Gemini, and Groq share one provider contract for text, JSON, streaming, and tool calls.
+- **MCP compatible:** import MCP tools or expose governed Bolt tools and agents through MCP protocol handlers.
 - **Production controls:** budgets, routing presets, circuit breaker, redaction, schema validation, events, and scoped `BOLT.md` instructions.
 - **Embeddable:** use it from Node, Next.js, or the `bolt` CLI.
 
@@ -57,6 +58,8 @@ Optional packages:
 ```bash
 pnpm add @bolt-ai/cli
 pnpm add @bolt-ai/tools
+pnpm add @bolt-ai/providers-openai
+pnpm add @bolt-ai/providers-gemini
 pnpm add @bolt-ai/providers-groq
 pnpm add @bolt-ai/next @bolt-ai/react
 pnpm add @bolt-ai/memory-redis
@@ -64,7 +67,7 @@ pnpm add @bolt-ai/memory-redis
 
 Requirements:
 
-- Node.js `>=18.17`
+- Node.js `>=20.0.0`
 - TypeScript projects should use ESM or a bundler that understands package `exports`
 
 ## Quick Start
@@ -364,17 +367,20 @@ Install:
 pnpm add -D @bolt-ai/cli
 ```
 
-Run with Groq:
+Run with any native provider:
 
 ```bash
-export GROQ_API_KEY=...
+export OPENAI_API_KEY=...
 
 bolt run support \
   --agents-dir agents \
   --skills-dir skills \
   --input '{"question":"Where is my order?"}' \
+  --provider openai \
   --preset fast
 ```
+
+The CLI also recognizes `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GROQ_API_KEY`. Without `--provider`, every configured native provider is registered with the runtime.
 
 Run without API keys using deterministic output:
 
@@ -391,7 +397,6 @@ bolt run support \
 ```ts
 // app/api/ai/route.ts
 import { createAppRouter, handle } from '@bolt-ai/next';
-import { createGroqProvider } from '@bolt-ai/providers-groq';
 import { defineAgent } from '@bolt-ai/agents';
 
 export const runtime = 'nodejs';
@@ -406,33 +411,57 @@ const support = defineAgent({
 
 const router = await createAppRouter({
   preset: 'fast',
-  providers: [createGroqProvider()],
   agents: [support],
 });
 
 export const POST = handle(router);
 ```
 
+`createAppRouter()` auto-detects installed native provider packages from `OPENAI_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`, and `GROQ_API_KEY`. Pass providers explicitly or set `providerAutoDetect: false` to disable inference.
+
 ## Provider Setup
 
-Groq is included as the first provider adapter:
+Install and combine any native adapters:
 
 ```ts
+import { createRuntime } from '@bolt-ai/core';
+import { createOpenAIProvider } from '@bolt-ai/providers-openai';
+import { createGeminiProvider } from '@bolt-ai/providers-gemini';
 import { createGroqProvider } from '@bolt-ai/providers-groq';
 
-const provider = createGroqProvider({
-  apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.3-70b-versatile',
-  temperature: 0.2,
+const runtime = createRuntime({
+  providers: [
+    createOpenAIProvider({ model: 'gpt-4o-mini' }),
+    createGeminiProvider({ model: 'gemini-2.5-flash' }),
+    createGroqProvider({ model: 'llama-3.3-70b-versatile' }),
+  ],
+  providerOrder: [
+    'openai:gpt-4o-mini',
+    'gemini:gemini-2.5-flash',
+    'groq:llama-3.3-70b-versatile',
+  ],
+  agents: [support],
 });
 ```
+
+Each adapter supports:
+
+- text and JSON output
+- incremental text streaming
+- provider-native function/tool calls
+- tool-result feedback into the next model call
+- shared `ProviderToolDefinition` and `ProviderToolResult` shapes
 
 Environment variables:
 
 ```bash
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash
 GROQ_API_KEY=...
 GROQ_MODEL=llama-3.3-70b-versatile
-BOLT_PROVIDER_ORDER=groq:llama-3.3-70b-versatile
+BOLT_PROVIDER_ORDER=openai:gpt-4o-mini,gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile
 BOLT_PRESET=fast
 REDIS_URL=redis://localhost:6379
 ```
@@ -450,6 +479,61 @@ export const provider: ModelProvider = {
   },
 };
 ```
+
+## MCP Integration
+
+Bolt provides transport-agnostic MCP client and server adapters. Connect them to stdio, HTTP, or another transport using your MCP host or SDK.
+
+Import advertised MCP tools as ordinary governed Bolt tools:
+
+```ts
+import { importMcpTools } from '@bolt-ai/tools';
+
+const remoteTools = await importMcpTools(
+  {
+    listTools: () => mcpClient.listTools(),
+    callTool: (request) => mcpClient.callTool(request),
+  },
+  { allow: ['files.read', 'search.docs'] }
+);
+
+const runtime = createRuntime({
+  providers: [createOpenAIProvider()],
+  tools: remoteTools,
+  agents: [
+    defineAgent({
+      id: 'research',
+      tools: remoteTools.map((tool) => tool.id),
+      prompt: { user: '{{input}}' },
+    }),
+  ],
+});
+```
+
+Expose Bolt tools and agents through MCP-compatible `tools/list` and `tools/call` handlers:
+
+```ts
+import { createMcpServer } from '@bolt-ai/tools';
+
+const mcp = createMcpServer({
+  tools: runtime.tools,
+  agents: [support],
+  memory: runtime.memory,
+  runAgent: async (agentId, input) => {
+    const result = await runtime.run(agentId, input, { throwOnError: false });
+    if (!result.ok) throw new Error(result.error?.message ?? 'Agent failed');
+    return result.output;
+  },
+});
+
+const listed = await mcp.listTools();
+const result = await mcp.callTool({
+  name: 'support',
+  arguments: { question: 'Where is my order?' },
+});
+```
+
+Agents and tools share the `CallableCapability` contract. `toolToCapability()`, `agentToCapability()`, and `agentToTool()` are available when an integration needs one callable representation.
 
 ## Scoped Instructions with BOLT.md
 
@@ -551,6 +635,8 @@ Other docs:
 | `@bolt-ai/agents` | `defineAgent`, Markdown parser, Markdown runtime, skill resolution |
 | `@bolt-ai/cli` | `bolt run` for local Markdown agents |
 | `@bolt-ai/tools` | HTTP, web search, MCP, and vector tool adapters |
+| `@bolt-ai/providers-openai` | Native OpenAI provider adapter |
+| `@bolt-ai/providers-gemini` | Native Gemini provider adapter |
 | `@bolt-ai/providers-groq` | Groq provider adapter with OpenAI-compatible tool mapping |
 | `@bolt-ai/next` | Next.js App Router helpers |
 | `@bolt-ai/react` | React helpers |
@@ -581,13 +667,15 @@ Focused checks:
 pnpm exec tsc --noEmit -p packages/core/tsconfig.json
 pnpm exec tsc --noEmit -p packages/agents/tsconfig.json
 pnpm exec tsc --noEmit -p packages/cli/tsconfig.json
+pnpm exec tsc --noEmit -p packages/providers/openai/tsconfig.json
+pnpm exec tsc --noEmit -p packages/providers/gemini/tsconfig.json
 pnpm exec tsc --noEmit -p packages/providers/groq/tsconfig.json
 node --test examples/markdown-runtime/run.test.mjs
 ```
 
 ## Release
 
-Bolt Agentic 1.0 is the first stable runtime-first release. It replaces the pre-1.0 roadmap docs with the shipped Markdown-agent runtime, CLI, provider tool loop, diagnostics, and governance surface.
+Bolt Agentic 1.0 is the first stable runtime-first release. It includes Markdown agents, native OpenAI/Gemini/Groq providers, MCP-compatible agent and tool adapters, the CLI, provider tool loops, diagnostics, and governance controls.
 
 ## License
 

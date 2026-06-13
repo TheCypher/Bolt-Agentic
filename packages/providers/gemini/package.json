@@ -1,7 +1,7 @@
 {
-  "name": "@bolt-ai/react",
+  "name": "@bolt-ai/providers-gemini",
   "version": "1.0.0",
-  "description": "React bindings and hooks for Bolt AI agents.",
+  "description": "Gemini model provider adapter for Bolt AI agents.",
   "license": "MIT",
   "author": "Bolt AI",
   "repository": {
@@ -15,8 +15,8 @@
   "keywords": [
     "ai",
     "agents",
-    "react",
-    "typescript",
+    "gemini",
+    "providers",
     "bolt"
   ],
   "type": "module",
@@ -24,15 +24,9 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "engines": {
     "node": ">=20.0.0"
   },
@@ -40,15 +34,17 @@
     "access": "public"
   },
   "peerDependencies": {
-    "react": "^18 || ^19",
-    "react-dom": "^18 || ^19"
+    "@bolt-ai/core": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@bolt-ai/core": { "optional": false }
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0"
   },
   "devDependencies": {
-    "@types/react": "^18.3.24",
-    "@types/react-dom": "^18.3.7",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tsup": "^8.0.0",
+    "@bolt-ai/core": "workspace:*",
+    "tsup": "^8.5.0",
     "typescript": "^5.5.0",
     "rimraf": "^6.0.1"
   },

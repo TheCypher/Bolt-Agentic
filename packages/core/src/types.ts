@@ -61,8 +61,26 @@ export interface ToolContext {
   signal?: AbortSignal;           // <-- propagate cancellation/timeouts to tools
 }
 
+export type CallableCapabilityKind = 'tool' | 'agent';
+
+export interface CapabilityCallContext extends ToolContext {
+  call?: AgentCtx['call'];
+  input?: unknown;
+  tools?: ToolRegistry;
+}
+
+export interface CallableCapability<TArgs = any, TOut = any> {
+  id: string;
+  kind: CallableCapabilityKind;
+  description?: string;
+  schema?: any;
+  run(args: TArgs, ctx: CapabilityCallContext): Promise<TOut>;
+}
+
 export interface Tool<TArgs = any, TOut = any> {
   id: string;
+  kind?: CallableCapabilityKind;
+  description?: string;
   schema?: any; // zod schema for args
   run(args: TArgs, ctx: ToolContext): Promise<TOut>;
 }
@@ -166,6 +184,98 @@ export interface Agent {
   tools?: string[];
   outputSchema?: any;
   run(ctx: AgentCtx): Promise<any>;
+}
+
+function createEmptyToolRegistry(): ToolRegistry {
+  return {
+    get() {
+      return undefined;
+    },
+    list() {
+      return [];
+    },
+    register() {
+      throw new Error('No tool registry available for this capability call');
+    },
+  };
+}
+
+function createUnavailableMemoryStore(): MemoryStore {
+  const unavailable = async () => {
+    throw new Error('No memory store available for this capability call');
+  };
+  return {
+    get: unavailable,
+    set: unavailable,
+    patch: unavailable,
+    appendConversation: unavailable,
+    history: unavailable,
+  } as MemoryStore;
+}
+
+const defaultAgentCall: AgentCtx['call'] = async () => {
+  throw new Error('No provider call implementation available for this capability call');
+};
+
+export interface AgentCapabilityOptions {
+  id?: string;
+  description?: string;
+  schema?: any;
+  memory?: MemoryStore;
+  tools?: ToolRegistry;
+  call?: AgentCtx['call'];
+  mapArgsToInput?: (args: any, ctx: CapabilityCallContext) => unknown;
+}
+
+export function toolToCapability<TArgs = any, TOut = any>(
+  tool: Tool<TArgs, TOut>
+): CallableCapability<TArgs, TOut> {
+  return {
+    id: tool.id,
+    kind: tool.kind ?? 'tool',
+    description: tool.description,
+    schema: tool.schema,
+    run: (args, ctx) => tool.run(args, ctx),
+  };
+}
+
+export function agentToCapability<TArgs = any, TOut = any>(
+  agent: Agent,
+  options: AgentCapabilityOptions = {}
+): CallableCapability<TArgs, TOut> {
+  return {
+    id: options.id ?? agent.id,
+    kind: 'agent',
+    description: options.description ?? agent.description,
+    schema: options.schema ?? { type: 'object' },
+    async run(args: TArgs, ctx: CapabilityCallContext = {}) {
+      return agent.run({
+        input: options.mapArgsToInput ? options.mapArgsToInput(args, ctx) : args,
+        call: ctx.call ?? options.call ?? defaultAgentCall,
+        memory: ctx.memory ?? options.memory ?? createUnavailableMemoryStore(),
+        tools: ctx.tools ?? options.tools ?? createEmptyToolRegistry(),
+      }) as Promise<TOut>;
+    },
+  };
+}
+
+export function capabilityToTool<TArgs = any, TOut = any>(
+  capability: CallableCapability<TArgs, TOut>
+): Tool<TArgs, TOut> {
+  return {
+    id: capability.id,
+    kind: capability.kind,
+    description: capability.description,
+    schema: capability.schema,
+    run: (args, ctx) => capability.run(args, ctx),
+  };
+}
+
+export function agentToTool<TArgs = any, TOut = any>(
+  agent: Agent,
+  options: AgentCapabilityOptions = {}
+): Tool<TArgs, TOut> {
+  return capabilityToTool(agentToCapability<TArgs, TOut>(agent, options));
 }
 
 /** Runner/Planner support types */

@@ -23,6 +23,8 @@ import type {
 } from "@bolt-ai/core";
 import type { Template } from "@bolt-ai/core";
 
+export type ProviderModuleLoader = (specifier: string) => Promise<Record<string, any>>;
+
 export type NextCreateOptions = {
   /** Policy preset for the core router */
   preset?: ProviderPreset;
@@ -57,7 +59,7 @@ export type NextCreateOptions = {
 
 /**
  * Create a Bolt AppRouter prepped for Next.js:
- * - Provider autodetect (e.g. Groq) by env + installed package
+ * - Provider autodetect (OpenAI, Gemini, Groq) by env + installed package
  * - Memory autodetect: InMemory by default; switch to Redis if REDIS_URL + package present
  * - Agents: explicit > global publish > discovered from agentsDir (compiled or plain JS)
  * - Templates: explicit > global publish > discovered from templatesDir (compiled or plain JS)
@@ -73,20 +75,7 @@ export async function createAppRouter(
   if (opts.providers?.length) {
     providers.push(...opts.providers);
   } else if (opts.providerAutoDetect !== false) {
-    // Auto-detect Groq when env key present AND package installed.
-    if (process.env.GROQ_API_KEY) {
-      try {
-        // dynamic specifier so DTS doesn't hard-require the module
-        const spec = "@bolt-ai/providers-groq";
-        const mod: any = await import(spec).catch(() => null);
-        if (mod?.createGroqProvider) {
-          providers.push(mod.createGroqProvider());
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    // (Future: add more provider autodetects here)
+    providers.push(...await detectProviders(process.env));
   }
 
   // ----- Memory (default InMemory; optionally Redis) -----
@@ -185,6 +174,49 @@ export async function createAppRouter(
   };
 
   return router;
+}
+
+export async function detectProviders(
+  env: NodeJS.ProcessEnv,
+  loadProvider: ProviderModuleLoader = defaultProviderLoader
+): Promise<ModelProvider[]> {
+  const candidates = [
+    {
+      key: env.OPENAI_API_KEY,
+      specifier: "@bolt-ai/providers-openai",
+      factory: "createOpenAIProvider",
+    },
+    {
+      key: env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY,
+      specifier: "@bolt-ai/providers-gemini",
+      factory: "createGeminiProvider",
+    },
+    {
+      key: env.GROQ_API_KEY,
+      specifier: "@bolt-ai/providers-groq",
+      factory: "createGroqProvider",
+    },
+  ];
+  const providers: ModelProvider[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.key) continue;
+    try {
+      const module = await loadProvider(candidate.specifier);
+      const factory = module[candidate.factory];
+      if (typeof factory === "function") {
+        providers.push(factory({ apiKey: candidate.key }));
+      }
+    } catch {
+      // Provider packages are optional for Next auto-detection.
+    }
+  }
+
+  return providers;
+}
+
+async function defaultProviderLoader(specifier: string): Promise<Record<string, any>> {
+  return import(/* @vite-ignore */ specifier);
 }
 
 // ---------- Discovery helpers ----------

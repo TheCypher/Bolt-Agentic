@@ -354,48 +354,85 @@ steps: [
 outputs: ['summary']
 ```
 
-### 4) `mcp.call` – Call tools on a local MCP server
+### 4) MCP client and server adapters
 
 > MCP (Model Context Protocol) exposes local/remote tools to LLM apps.
-> Bolt ships a small wrapper; provide the MCP client implementation.
+> Bolt supplies protocol adapters for importing MCP tools and exposing Bolt tools or agents. Your MCP SDK or host owns the stdio/HTTP transport.
 
-Minimal wrapper (adapt to your MCP SDK):
+Use `createMcpTool` when one governed Bolt tool should dispatch to named remote MCP tools:
 
 ```ts
-// src/tools/mcp.ts
-import { z } from 'zod';
 import { createMcpTool } from '@bolt-ai/tools';
 
-// Suppose you have an MCP client that can call a named tool
-const mcp = createMcpClient({ command: 'node', args: ['path/to/server.js'] });
-
-const McpArgs = z.object({
-  tool: z.string(),            // MCP tool name
-  params: z.record(z.any()).optional()
-});
-
-export const mcpCall = createMcpTool({
-  callTool: (tool, args) => mcp.callTool(tool, args)
+const remoteMcp = createMcpTool({
+  callTool: (tool, args) =>
+    mcpClient.callTool({ name: tool, arguments: args })
 });
 ```
 
-Register:
+Import every advertised MCP tool, optionally constrained by an allow-list:
 
 ```ts
-const g = globalThis as any;
-g.__BOLT_TOOLS__ = { ...(g.__BOLT_TOOLS__ || {}), 'mcp.call': Object.assign(mcpCall, { schema: McpArgs }) };
+import { importMcpTools } from '@bolt-ai/tools';
+
+const remoteTools = await importMcpTools(
+  {
+    listTools: () => mcpClient.listTools(),
+    callTool: (request) => mcpClient.callTool(request),
+  },
+  { allow: ['files.read', 'search.docs'] }
+);
+
+const runtime = createRuntime({
+  providers: [createOpenAIProvider()],
+  tools: remoteTools,
+  agents: [
+    defineAgent({
+      id: 'research',
+      tools: remoteTools.map((tool) => tool.id),
+      prompt: { user: '{{input}}' },
+    }),
+  ],
+});
 ```
 
-**Template usage**:
+Expose registered Bolt tools and agents as MCP-compatible handlers:
 
 ```ts
-// ask MCP server for a PDF→text conversion, then summarize
-steps: [
-  { id: 'pdf', kind: 'tool', toolId: 'mcp.call', args: { tool: 'pdf.extractText', params: { path: '/files/invoice.pdf' } } },
-  { id: 'summary', kind: 'model', agent: 'support', inputFrom: ['pdf'] },
-],
-outputs: ['summary']
+import { createMcpServer } from '@bolt-ai/tools';
+
+const mcp = createMcpServer({
+  tools: runtime.tools,
+  agents: [support],
+  allow: ['local.kb.lookup', 'support'],
+  memory: runtime.memory,
+  runAgent: async (agentId, input) => {
+    const result = await runtime.run(agentId, input, { throwOnError: false });
+    if (!result.ok) throw new Error(result.error?.message ?? 'Agent failed');
+    return result.output;
+  },
+});
+
+const listResult = await mcp.listTools();
+const callResult = await mcp.callTool({
+  name: 'support',
+  arguments: { question: 'Summarize this account' },
+});
 ```
+
+`createMcpServer()` returns transport-independent `listTools()` and `callTool()` handlers. Wire those handlers into the MCP SDK transport used by your application.
+
+Bolt tools and agents share a callable capability layer:
+
+```ts
+import {
+  agentToCapability,
+  agentToTool,
+  toolToCapability,
+} from '@bolt-ai/core';
+```
+
+Use these adapters when an integration needs tools and agents to share one callable registry. Agent-level tool allow-lists remain enforced when the agent is executed through `runtime.run()`.
 
 ---
 

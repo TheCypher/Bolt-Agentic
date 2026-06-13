@@ -241,6 +241,7 @@ describe("BoltRuntime", () => {
       tools: [
         {
           id: "allowed.echo",
+          description: "Echo an allowed value",
           schema: {
             type: "object",
             required: ["value"],
@@ -261,6 +262,7 @@ describe("BoltRuntime", () => {
     expect(seenTools).toEqual([
       {
         id: "allowed.echo",
+        description: "Echo an allowed value",
         schema: {
           type: "object",
           required: ["value"],

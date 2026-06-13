@@ -4,14 +4,14 @@ Current documentation for Bolt Agentic 1.0.
 
 ## Start Here
 
-- `../README.md` - complete 1.0 overview, install guide, runtime examples, Markdown agents, CLI, Next.js, providers, governance, and development checks
+- `../README.md` - complete 1.0 overview, Markdown agents, CLI, Next.js, OpenAI/Gemini/Groq providers, MCP, governance, and development checks
 - `../examples/markdown-runtime/README.md` - runnable Markdown runtime example with a mock provider, skill, and local tool
 - `../examples/complex-agent/README.md` - runnable multi-agent example with scoped `BOLT.md` instructions
 
 ## Guides
 
 - `Planner.md` - deterministic plans, runner steps, retries, guards, branching, maps, budgets, and cache keys
-- `Tools.md` - tool registration, agent allow-lists, HTTP allow-lists, web search domain filters, MCP, and vector tools
+- `Tools.md` - tool registration, agent allow-lists, HTTP allow-lists, web search domain filters, MCP import/export, and vector tools
 
 ## Documentation Flow
 
@@ -20,9 +20,11 @@ README.md
    |
    +--> examples/markdown-runtime/README.md
    |
+   +--> native providers: OpenAI / Gemini / Groq
+   |
    +--> Docs/Planner.md
    |
-   +--> Docs/Tools.md
+   +--> Docs/Tools.md -> MCP client/server adapters
    |
    +--> examples/complex-agent/README.md
 ```
