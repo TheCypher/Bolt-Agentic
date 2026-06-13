@@ -126,7 +126,8 @@ describe("MCP server exports", () => {
       ],
     });
     await expect(server.callTool({ name: "local.echo", arguments: { value: "hi" } })).resolves.toEqual({
-      content: [{ type: "json", json: { echoed: "HI" } }],
+      content: [{ type: "text", text: "{\"echoed\":\"HI\"}" }],
+      structuredContent: { echoed: "HI" },
     });
     expect(run).toHaveBeenCalledWith(
       { value: "hi" },
@@ -159,8 +160,41 @@ describe("MCP server exports", () => {
       ],
     });
     await expect(server.callTool({ name: "agent.summarize", arguments: { text: "hello" } })).resolves.toEqual({
-      content: [{ type: "json", json: { summary: "summary:hello", hasTools: true } }],
+      content: [{ type: "text", text: "{\"summary\":\"summary:hello\",\"hasTools\":true}" }],
+      structuredContent: { summary: "summary:hello", hasTools: true },
     });
+  });
+
+  it("can expose agents through a runtime-backed runner", async () => {
+    const runAgent = vi.fn(async (agentId: string, input: unknown) => ({
+      agentId,
+      input,
+      routed: true,
+    }));
+    const agent: Agent = {
+      id: "agent.routed",
+      capabilities: ["text"],
+      async run() {
+        throw new Error("direct agent execution should not run");
+      },
+    };
+    const server = createMcpServer({ agents: [agent], runAgent });
+
+    await expect(server.callTool({
+      name: "agent.routed",
+      arguments: { question: "hello" },
+    })).resolves.toEqual({
+      content: [{
+        type: "text",
+        text: "{\"agentId\":\"agent.routed\",\"input\":{\"question\":\"hello\"},\"routed\":true}",
+      }],
+      structuredContent: {
+        agentId: "agent.routed",
+        input: { question: "hello" },
+        routed: true,
+      },
+    });
+    expect(runAgent).toHaveBeenCalledWith("agent.routed", { question: "hello" });
   });
 
   it("enforces MCP server allow-lists for exposed tools and agents", async () => {

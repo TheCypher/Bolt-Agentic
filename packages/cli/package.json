@@ -1,7 +1,7 @@
 {
   "name": "@bolt-ai/cli",
   "version": "1.0.0",
-  "description": "CLI for running Bolt Markdown agents.",
+  "description": "CLI for running Bolt Markdown agents with native providers.",
   "license": "MIT",
   "author": "Bolt AI",
   "repository": {
@@ -24,7 +24,7 @@
   },
   "files": ["dist"],
   "engines": {
-    "node": ">=18.17"
+    "node": ">=20.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -32,6 +32,8 @@
   "dependencies": {
     "@bolt-ai/agents": "workspace:*",
     "@bolt-ai/core": "workspace:*",
+    "@bolt-ai/providers-gemini": "workspace:*",
+    "@bolt-ai/providers-openai": "workspace:*",
     "@bolt-ai/providers-groq": "workspace:*"
   },
   "devDependencies": {

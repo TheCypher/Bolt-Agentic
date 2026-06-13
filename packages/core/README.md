@@ -2,7 +2,7 @@
 
 Core runtime primitives for Bolt Agentic 1.0.
 
-This package provides the provider-agnostic execution layer: runtime facade, router, memory interface, tool registry, planner, runner, events, budgets, redaction hooks, scoped `BOLT.md` discovery, and shared TypeScript types.
+This package provides the provider-agnostic execution layer: runtime facade, router, memory interface, callable agent/tool capabilities, planner, runner, events, budgets, redaction hooks, scoped `BOLT.md` discovery, and shared TypeScript types.
 
 ## Install
 
@@ -98,7 +98,31 @@ const result = await runtime.run('support', { question: 'Where is my order?' });
 - `runPlan()` and planner/runner types
 - `createOrchestrator()`
 - `discoverBoltDocs()`
-- shared types such as `Agent`, `Tool`, `ModelProvider`, `RunResult`, `Plan`, and `MemoryStore`
+- `toolToCapability()`, `agentToCapability()`, and `agentToTool()`
+- shared types such as `Agent`, `Tool`, `CallableCapability`, `ModelProvider`, `RunResult`, `Plan`, and `MemoryStore`
+
+## Native Providers
+
+```bash
+pnpm add @bolt-ai/providers-openai
+pnpm add @bolt-ai/providers-gemini
+pnpm add @bolt-ai/providers-groq
+```
+
+```ts
+import { createOpenAIProvider } from '@bolt-ai/providers-openai';
+import { createGeminiProvider } from '@bolt-ai/providers-gemini';
+import { createGroqProvider } from '@bolt-ai/providers-groq';
+
+const runtime = createRuntime({
+  providers: [
+    createOpenAIProvider(),
+    createGeminiProvider(),
+    createGroqProvider(),
+  ],
+  agents: [support],
+});
+```
 
 ## Structured Results
 

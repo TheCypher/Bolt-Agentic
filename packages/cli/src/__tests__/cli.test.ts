@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { parseCliArgs, runCli } from "../index";
+import { createCliProviders, parseCliArgs, runCli } from "../index";
 
 async function makeTempDir(prefix: string) {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -39,6 +39,8 @@ describe("bolt CLI", () => {
       "skills",
       "--input",
       "{\"question\":\"Hi\"}",
+      "--provider",
+      "gemini",
       "--mock-output",
       "ok",
     ])).toEqual({
@@ -46,8 +48,56 @@ describe("bolt CLI", () => {
       agentsDir: "agents",
       skillsDir: "skills",
       input: { question: "Hi" },
+      provider: "gemini",
       mockOutput: "ok",
     });
+  });
+
+  it("loads the explicitly selected native provider", async () => {
+    const providers = await createCliProviders(
+      {
+        agentId: "support",
+        agentsDir: "agents",
+        input: "Hi",
+        provider: "openai",
+      },
+      { OPENAI_API_KEY: "openai-key" },
+      async (specifier) => {
+        expect(specifier).toBe("@bolt-ai/providers-openai");
+        return {
+          createOpenAIProvider: ({ apiKey }: { apiKey: string }) => ({
+            id: `openai:${apiKey}`,
+            supports: ["text"],
+            async call() {
+              return { output: "ok" };
+            },
+          }),
+        };
+      }
+    );
+
+    expect(providers.map((provider) => provider.id)).toEqual(["openai:openai-key"]);
+  });
+
+  it("auto-detects Gemini when its key is configured", async () => {
+    const providers = await createCliProviders(
+      { agentId: "support", agentsDir: "agents", input: "Hi" },
+      { GEMINI_API_KEY: "gemini-key" },
+      async (specifier) => {
+        expect(specifier).toBe("@bolt-ai/providers-gemini");
+        return {
+          createGeminiProvider: ({ apiKey }: { apiKey: string }) => ({
+            id: `gemini:${apiKey}`,
+            supports: ["text"],
+            async call() {
+              return { output: "ok" };
+            },
+          }),
+        };
+      }
+    );
+
+    expect(providers.map((provider) => provider.id)).toEqual(["gemini:gemini-key"]);
   });
 
   it("runs a Markdown agent from agentsDir with a mock provider", async () => {

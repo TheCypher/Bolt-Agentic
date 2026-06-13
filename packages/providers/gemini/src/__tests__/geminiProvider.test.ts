@@ -176,7 +176,12 @@ describe("Gemini provider", () => {
   it("streams token deltas and returns streamed text", async () => {
     const stream = chunks([{ text: "Hel" }, { text: "lo" }]);
     const generateContentStream = vi.fn().mockResolvedValue(stream);
-    const client = { models: { generateContentStream } };
+    const client = {
+      models: {
+        generateContent: vi.fn(),
+        generateContentStream,
+      },
+    };
     const provider = createGeminiProvider({ client, apiKey: "test", model: "gemini-test" });
     const deltas: string[] = [];
 

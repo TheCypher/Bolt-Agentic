@@ -37,12 +37,14 @@ export type McpCallToolRequest = {
   args?: any;
 };
 
-export type McpContent =
-  | { type: "json"; json: any }
-  | { type: "text"; text: string };
+export type McpContent = {
+  type: string;
+  [key: string]: any;
+};
 
 export type McpCallToolResult = {
   content: McpContent[];
+  structuredContent?: Record<string, any>;
   isError?: boolean;
 };
 
@@ -61,6 +63,7 @@ export type McpServerOptions = {
   allow?: string[];
   memory?: MemoryStore;
   call?: AgentCtx["call"];
+  runAgent?: (agentId: string, input: unknown) => Promise<any>;
 };
 
 export type McpServer = {
@@ -200,23 +203,50 @@ function isMcpCallToolResult(value: any): value is McpCallToolResult {
 
 function toMcpCallToolResult(value: any): McpCallToolResult {
   if (isMcpCallToolResult(value)) return value;
+  if (typeof value === "string") {
+    return { content: [{ type: "text", text: value }] };
+  }
+  const structuredContent =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : { result: value };
   return {
-    content: [{ type: "json", json: value }],
+    content: [{ type: "text", text: stringifyMcpOutput(value) }],
+    structuredContent,
   };
+}
+
+function stringifyMcpOutput(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function createCapabilities(options: McpServerOptions): CallableCapability[] {
   const tools = toolsFromInput(options.tools);
   const registry = createArrayRegistry(tools);
+  const agentCapabilities = agentsFromInput(options.agents).map((agent): CallableCapability => {
+    if (options.runAgent) {
+      return {
+        id: agent.id,
+        kind: "agent",
+        description: agent.description,
+        schema: { type: "object" },
+        run: (args) => options.runAgent!(agent.id, args),
+      };
+    }
+    return agentToCapability(agent, {
+      memory: options.memory,
+      call: options.call,
+      tools: createScopedRegistry({ agent, registry, memory: options.memory }),
+    });
+  });
   return [
     ...tools.map(toolToCapability),
-    ...agentsFromInput(options.agents).map((agent) =>
-      agentToCapability(agent, {
-        memory: options.memory,
-        call: options.call,
-        tools: createScopedRegistry({ agent, registry, memory: options.memory }),
-      })
-    ),
+    ...agentCapabilities,
   ];
 }
 

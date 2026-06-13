@@ -13,6 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "tsup src/index.ts --dts --format esm,cjs --tsconfig tsconfig.json",
     "clean": "rimraf dist"

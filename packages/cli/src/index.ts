@@ -9,19 +9,23 @@ export interface CliIo {
   env?: NodeJS.ProcessEnv;
 }
 
+export type CliProviderName = "openai" | "gemini" | "groq";
+export type ProviderModuleLoader = (specifier: string) => Promise<Record<string, any>>;
+
 export interface RunCommandOptions {
   agentId: string;
   agentsDir: string;
   skillsDir?: string;
   input: unknown;
   preset?: "fast" | "cheap" | "strict" | "auto";
+  provider?: CliProviderName;
   mockOutput?: string;
 }
 
 function usage() {
   return [
     "Usage:",
-    "  bolt run <agentId> --agents-dir <dir> --input <text-or-json> [--skills-dir <dir>]",
+    "  bolt run <agentId> --agents-dir <dir> --input <text-or-json> [--skills-dir <dir>] [--provider openai|gemini|groq]",
     "",
     "Development:",
     "  bolt run support --agents-dir agents --skills-dir skills --input '{\"question\":\"Hi\"}' --mock-output 'ok'",
@@ -49,6 +53,7 @@ export function parseCliArgs(argv: string[]): RunCommandOptions {
     else if (flag === "--skills-dir") options.skillsDir = value;
     else if (flag === "--input") options.input = parseInput(value);
     else if (flag === "--preset") options.preset = value as RunCommandOptions["preset"];
+    else if (flag === "--provider") options.provider = parseProvider(value);
     else if (flag === "--mock-output") options.mockOutput = value;
     else throw new Error(`Unknown option: ${flag}`);
   }
@@ -65,7 +70,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
 
   try {
     const options = parseCliArgs(argv);
-    const providers = await createProviders(options, env);
+    const providers = await createCliProviders(options, env);
     const runtime = createMarkdownRuntime({
       agentsDir: options.agentsDir,
       skillsDir: options.skillsDir,
@@ -89,7 +94,11 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
   }
 }
 
-async function createProviders(options: RunCommandOptions, env: NodeJS.ProcessEnv): Promise<ModelProvider[]> {
+export async function createCliProviders(
+  options: RunCommandOptions,
+  env: NodeJS.ProcessEnv,
+  loadProvider: ProviderModuleLoader = defaultProviderLoader
+): Promise<ModelProvider[]> {
   if (options.mockOutput != null) {
     return [
       {
@@ -101,12 +110,59 @@ async function createProviders(options: RunCommandOptions, env: NodeJS.ProcessEn
       },
     ];
   }
-  if (env.GROQ_API_KEY) {
-    const spec = "@bolt-ai/providers-groq";
-    const { createGroqProvider } = await import(/* @vite-ignore */ spec);
-    return [createGroqProvider({ apiKey: env.GROQ_API_KEY })];
+
+  const candidates = [
+    {
+      name: "openai" as const,
+      key: env.OPENAI_API_KEY,
+      specifier: "@bolt-ai/providers-openai",
+      factory: "createOpenAIProvider",
+    },
+    {
+      name: "gemini" as const,
+      key: env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY,
+      specifier: "@bolt-ai/providers-gemini",
+      factory: "createGeminiProvider",
+    },
+    {
+      name: "groq" as const,
+      key: env.GROQ_API_KEY,
+      specifier: "@bolt-ai/providers-groq",
+      factory: "createGroqProvider",
+    },
+  ];
+  const selected = options.provider
+    ? candidates.filter((candidate) => candidate.name === options.provider)
+    : candidates.filter((candidate) => Boolean(candidate.key));
+
+  if (options.provider && !selected[0]?.key) {
+    throw new Error(`No API key configured for provider '${options.provider}'.`);
   }
-  throw new Error("No provider configured. Set GROQ_API_KEY or pass --mock-output for local testing.");
+
+  const providers: ModelProvider[] = [];
+  for (const candidate of selected) {
+    if (!candidate.key) continue;
+    const module = await loadProvider(candidate.specifier);
+    const factory = module[candidate.factory];
+    if (typeof factory !== "function") {
+      throw new Error(`Provider package '${candidate.specifier}' does not export ${candidate.factory}.`);
+    }
+    providers.push(factory({ apiKey: candidate.key }));
+  }
+
+  if (providers.length) return providers;
+  throw new Error(
+    "No provider configured. Set OPENAI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, or GROQ_API_KEY; or pass --mock-output."
+  );
+}
+
+async function defaultProviderLoader(specifier: string): Promise<Record<string, any>> {
+  return import(/* @vite-ignore */ specifier);
+}
+
+function parseProvider(value: string): CliProviderName {
+  if (value === "openai" || value === "gemini" || value === "groq") return value;
+  throw new Error(`Invalid provider '${value}'. Expected openai, gemini, or groq.`);
 }
 
 function parseInput(value: string): unknown {

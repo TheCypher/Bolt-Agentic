@@ -520,6 +520,7 @@ export class Router implements AppRouter {
           ...safeArgs,
           tools: safeArgs.tools ?? tools.list().map((tool) => ({
             id: tool.id,
+            description: tool.description,
             schema: tool.schema,
           })),
           onToken: (delta: string) => {
